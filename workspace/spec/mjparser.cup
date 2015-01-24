@@ -1,0 +1,313 @@
+package rs.ac.bg.etf.pp1.sv110059;
+
+import java_cup.runtime.*;
+import org.apache.log4j.*;
+import java.io.*;
+
+
+parser code {:
+	int printCallCount = 0;
+	
+	Logger log = Logger.getLogger(getClass());
+   
+   
+    // slede redefinisani metodi za prijavu gresaka radi izmene teksta poruke
+     
+    public void report_fatal_error(String message, Object info) throws java.lang.Exception {
+      done_parsing();
+      report_error(message, info);
+    }
+  
+    public void syntax_error(Symbol cur_token) {
+        report_error("\nSintaksna greska", cur_token);
+    }
+  
+    public void unrecovered_syntax_error(Symbol cur_token) throws java.lang.Exception {
+        report_fatal_error("Fatalna greska, parsiranje se ne moze nastaviti", cur_token);
+    }
+
+    public void report_error(String message, Object info) {
+    	StringBuilder msg = new StringBuilder(message); 
+    	if (info instanceof Symbol)
+            msg.append (" na liniji ").append(((Symbol)info).left);
+        log.error(msg.toString());
+    }
+    
+    boolean greska;
+    
+    public static void main(String args[]) throws Exception {
+        FileReader r = new FileReader(args[0]);
+        Yylex skener = new Yylex(r);
+        MJParser p = new MJParser(skener);
+        Symbol s = p.parse();  //pocetak parsiranja
+        if (p.greska) 
+        	System.out.println("Ulazni program ima gresaka!");
+        else 
+        	System.out.println("Parsiranje uspesno zavrseno!");
+        
+    }
+    
+:}
+
+scan with {:
+	Symbol s = this.getScanner().next_token();
+	if (s != null && s.value != null) 
+		log.info(s.toString() + " " + s.value.toString());
+	return s;
+:}
+
+terminal PROGRAM, LBRACE, RBRACE, SEMI, LPAREN, RPAREN, COMMA, PRINT, RETURN, PLUS, EQUAL, VOID ;
+terminal EXTENDS, GT, GTE, LT, LTE, NEW, DIV, MOD, MINUS, NOT_EQUAL, IS_EQUAL, CONST, AND, LSQUARE, RSQUARE, OR, TIMES ;
+terminal BREAK, INC, DEC, WHILE, CLASS, CHARCONST, BOOLCONST, STRCONST, ELSE, IF, READ, DOT ;
+terminal Integer NUMBER ;
+terminal String IDENT ;
+
+non terminal Program, VarDeclList, MethodDeclList, VarDecl, Type, MethodDecl ;
+non terminal FormPars, Addop, Factor ;
+non terminal StatementList, Statement, Designator, Expr, Term ;
+non terminal Unmatched, Matched ;
+non terminal Rhs, RhsElem, DeclarationList, DeclarationPart, ConstDecl, VarList, Var ;
+non terminal ClassDecl, Ext, ClassMethods, Parameter, FormalParams, ReturnType, FunctionCall, IdentList, IdentRef ;
+non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Relop, Sign, AddList, MulList, Mulop, ActParams ;
+
+Program ::= PROGRAM IDENT DeclarationList LBRACE MethodDeclList RBRACE ;
+
+DeclarationList	::=  DeclarationList DeclarationPart
+					|
+					/* epsilon */
+					;
+
+DeclarationPart	::=  ConstDecl
+					|    
+					VarDecl
+					|
+					ClassDecl
+					;
+
+ConstDecl ::= CONST Type IDENT EQUAL Rhs ;
+
+Rhs ::= Rhs COMMA RhsElem
+		|
+		RhsElem
+		;
+		
+RhsElem ::= NUMBER
+			|
+			CHARCONST
+			|
+			BOOLCONST
+			|
+			STRCONST
+			;
+
+VarDecl ::= Type VarList SEMI ;
+
+VarList ::= VarList COMMA Var
+					|
+					Var
+					;
+					
+Var ::= IDENT
+		|
+		IDENT LSQUARE RSQUARE
+		;
+
+Type ::= IDENT ;
+
+ClassDecl ::= CLASS IDENT Ext LBRACE VarDeclList ClassMethods RBRACE ;
+
+Ext ::= EXTENDS Type
+		|
+		/* epsilon */
+		;
+		
+VarDeclList ::= VarDeclList VarDecl
+				|
+				/* epsilon */
+				;
+				
+ClassMethods ::= LBRACE MethodDeclList RBRACE
+				|
+				/* epsilon */
+				;
+
+
+
+MethodDeclList ::= MethodDeclList MethodDecl
+					|
+					/* epsilon */
+					;
+
+MethodDecl ::= ReturnType IDENT LPAREN FormalParams RPAREN VarDeclList LBRACE StatementList RBRACE ;
+
+ReturnType ::= Type
+				|
+				VOID
+				;
+
+FormalParams ::= FormPars
+				|
+				/* epsilon */
+				;
+
+FormPars  ::=  FormPars COMMA Parameter
+		     		|    
+		     		Parameter
+		     		;
+
+Parameter  ::=  Type IDENT
+	            |
+	            Type IDENT LSQUARE RSQUARE
+	            ;
+
+StatementList ::= StatementList Statement
+					|
+					/* epsilon */
+					;
+
+Statement ::= Matched | Unmatched ;
+
+ 
+
+Matched ::= Designator DesignatorsFollowUp SEMI
+				|
+				Designator EQUAL error SEMI
+				{: parser.log.debug("Uspesan oporavak od greske pri dodeli vrednosti."); :}
+				|
+				RETURN Expr SEMI
+				|
+				RETURN SEMI
+				|
+				IF Condition Matched ELSE Matched
+				|
+				WHILE LPAREN Condition RPAREN Matched
+				|
+				BREAK SEMI
+				|
+				READ LPAREN Designator RPAREN SEMI
+				|
+				PRINT LPAREN Expr OptNumbers RPAREN SEMI
+				|
+				LBRACE StatementList RBRACE
+				;
+				
+OptNumbers ::= OptNumbers COMMA NUMBER
+				|
+				/* epsilon */
+				;
+				
+ActParams ::= ActPars
+				|
+				/* epsilon */
+				;
+				
+ActPars ::= ActPars COMMA Expr
+			|
+			Expr
+			;
+			
+Condition ::= Condition OR CondTerm
+				|
+				CondTerm
+				;
+				
+CondTerm ::= CondTerm AND CondFact
+				|
+				CondFact
+				;
+				
+CondFact ::= CondFact Relop Expr
+				|
+				Expr
+				;
+				
+Expr ::= Sign Term AddList ;
+
+Sign ::= MINUS | /* epsilon */ ;
+
+AddList ::= AddList Addop Term
+			|
+			/* epsilon */
+			;
+			
+Term ::= Factor MulList ;
+
+MulList ::= MulList Mulop Factor
+			|
+			/* epsilon */
+			;
+			
+Factor ::= Designator FunctionCall
+			|
+			NUMBER
+			|
+			CHARCONST
+			|
+			BOOLCONST
+			|
+			STRCONST
+			|
+			NEW Type
+			|
+			NEW Type LSQUARE Expr RSQUARE
+			|
+			LPAREN Expr RPAREN
+			;
+
+FunctionCall ::= LPAREN ActParams RPAREN
+				|
+				/* epsilon */
+				;
+				
+DesignatorsFollowUp ::= EQUAL Expr
+						|
+						LPAREN ActParams RPAREN
+						|
+						INC
+						|
+						DEC
+						;
+				
+Unmatched ::= IF Condition Statement
+			 | IF 
+			 Condition Matched ELSE Unmatched
+			 |
+			 WHILE LPAREN Condition RPAREN Unmatched
+			 ;
+					
+Designator ::= IDENT IdentList;
+
+IdentList ::= IdentList IdentRef
+				|
+				/* epsilon */
+				;
+				
+IdentRef ::= DOT IDENT
+			|
+			LSQUARE Expr RSQUARE
+			;
+
+Relop ::= IS_EQUAL
+			|
+			NOT_EQUAL
+			|
+			GT
+			|
+			GTE
+			|
+			LT
+			|
+			LTE
+			;
+
+Addop ::= PLUS
+			|
+			MINUS
+			;
+			
+Mulop ::= TIMES
+			|
+			DIV
+			|
+			MOD
+			;

@@ -1,0 +1,13 @@
+program MJProgram
+	int x;
+	int y;
+{
+	int main() {
+		print(1);
+		x=y+3+;
+		print(2);
+	}
+}
+//true
+//"abc"
+//?! false
