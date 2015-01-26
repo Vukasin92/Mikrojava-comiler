@@ -1,19 +1,23 @@
 package rs.ac.bg.etf.pp1.sv110059;
 
 import java_cup.runtime.*;
-import org.apache.log4j.*;
 import java.io.*;
 
 
 parser code {:
-	int printCallCount = 0;
+	//promenljive za brojanje pojavljivanja odredjenih elemenata
 	
-	Logger log = Logger.getLogger(getClass());
-   
-   
+	int globalCharVarCount = 0; //TODO: R40
+	int globalArrayCount = 0; //R41
+	int funcCount = 0; //R42
+	int classCount = 0; //R43
+	int statementBlocks = 0; //R44
+	int funcCallsInMain = 0; //TODO: R45
+
     // slede redefinisani metodi za prijavu gresaka radi izmene teksta poruke
+    boolean greska;
      
-    public void report_fatal_error(String message, Object info) throws java.lang.Exception {
+   public void report_fatal_error(String message, Object   info) throws java.lang.Exception {
       done_parsing();
       report_error(message, info);
     }
@@ -26,20 +30,30 @@ parser code {:
         report_fatal_error("Fatalna greska, parsiranje se ne moze nastaviti", cur_token);
     }
 
-    public void report_error(String message, Object info) {
-    	StringBuilder msg = new StringBuilder(message); 
-    	if (info instanceof Symbol)
-            msg.append (" na liniji ").append(((Symbol)info).left);
-        log.error(msg.toString());
+  public void report_error(String message, Object info)
+    {
+      greska=true;
+      System.err.print(message);
+      System.err.flush();
+      if (info instanceof Symbol)
+          System.err.println(" na liniji " + ((Symbol)info).left);
+      else System.err.println("");
     }
     
-    boolean greska;
+    public void printCounts() {
+    	System.out.println("Broj elemenata: ");
+    	System.out.println("Deklaracije globalnih nizova - " + globalArrayCount);
+    	System.out.println("Definicije funkcija u glavnom programu - " + funcCount);
+    	System.out.println("Definicije unutrasnjih klasa - " + classCount);
+    	System.out.println("Blokovi naredbi - " + statementBlocks);
+    }
     
     public static void main(String args[]) throws Exception {
         FileReader r = new FileReader(args[0]);
         Yylex skener = new Yylex(r);
         MJParser p = new MJParser(skener);
         Symbol s = p.parse();  //pocetak parsiranja
+        p.printCounts();
         if (p.greska) 
         	System.out.println("Ulazni program ima gresaka!");
         else 
@@ -49,10 +63,18 @@ parser code {:
     
 :}
 
+
+action code {:
+
+	boolean global = true;
+
+:}
+
+
 scan with {:
 	Symbol s = this.getScanner().next_token();
 	if (s != null && s.value != null) 
-		log.info(s.toString() + " " + s.value.toString());
+		System.out.println(s.toString() + " " + s.value.toString());
 	return s;
 :}
 
@@ -70,7 +92,9 @@ non terminal Rhs, RhsElem, DeclarationList, DeclarationPart, ConstDecl, VarList,
 non terminal ClassDecl, Ext, ClassMethods, Parameter, FormalParams, ReturnType, FunctionCall, IdentList, IdentRef ;
 non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Relop, Sign, AddList, MulList, Mulop, ActParams ;
 
-Program ::= PROGRAM IDENT DeclarationList LBRACE MethodDeclList RBRACE ;
+Program ::= PROGRAM IDENT DeclarationList LBRACE {:
+						global = false;
+					:} MethodDeclList RBRACE ;
 
 DeclarationList	::=  DeclarationList DeclarationPart
 					|
@@ -109,12 +133,17 @@ VarList ::= VarList COMMA Var
 					
 Var ::= IDENT
 		|
-		IDENT LSQUARE RSQUARE
+		IDENT LSQUARE RSQUARE {:
+			if (global)
+				parser.globalArrayCount++;
+		:}
 		;
 
 Type ::= IDENT ;
 
-ClassDecl ::= CLASS IDENT Ext LBRACE VarDeclList ClassMethods RBRACE ;
+ClassDecl ::= CLASS IDENT Ext LBRACE VarDeclList ClassMethods RBRACE {:
+					parser.classCount++;
+				:} ;
 
 Ext ::= EXTENDS Type
 		|
@@ -138,7 +167,12 @@ MethodDeclList ::= MethodDeclList MethodDecl
 					/* epsilon */
 					;
 
-MethodDecl ::= ReturnType IDENT LPAREN FormalParams RPAREN VarDeclList LBRACE StatementList RBRACE ;
+MethodDecl ::= ReturnType IDENT LPAREN FormalParams RPAREN VarDeclList LBRACE StatementList RBRACE {:
+					if (!global)
+						parser.funcCount++;
+					
+					parser.statementBlocks++;
+				:} ;
 
 ReturnType ::= Type
 				|
@@ -172,7 +206,7 @@ Statement ::= Matched | Unmatched ;
 Matched ::= Designator DesignatorsFollowUp SEMI
 				|
 				Designator EQUAL error SEMI
-				{: parser.log.debug("Uspesan oporavak od greske pri dodeli vrednosti."); :}
+				{: System.err.println("Uspesan oporavak od greske pri dodeli vrednosti."); :}
 				|
 				RETURN Expr SEMI
 				|
@@ -188,7 +222,9 @@ Matched ::= Designator DesignatorsFollowUp SEMI
 				|
 				PRINT LPAREN Expr OptNumbers RPAREN SEMI
 				|
-				LBRACE StatementList RBRACE
+				LBRACE StatementList RBRACE  {:
+						parser.statementBlocks++;
+					:}
 				;
 				
 OptNumbers ::= OptNumbers COMMA NUMBER

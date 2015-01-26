@@ -1,7 +1,8 @@
 package rs.ac.bg.etf.pp1.sv110059;
 
 import java_cup.runtime.Symbol;
-import org.apache.log4j.Logger;
+//import org.apache.log4j.Logger;
+import java.io.PrintStream;
 
 %%
 
@@ -18,7 +19,15 @@ import org.apache.log4j.Logger;
 	private int errorLine;
 	private int errorColumn;
 	private StringBuilder errorString;
-	private Logger logger = Logger.getLogger(MJTest.class);
+	//private Logger logger = Logger.getLogger(MJTest.class);
+	private PrintStream ps = System.out;
+	
+	public PrintStream getPrintStream() {
+		return ps;
+	}
+	public void setPrintStream(PrintStream ps) {
+		this.ps = ps;
+	}
 %}
 
 %cup
@@ -91,11 +100,11 @@ import org.apache.log4j.Logger;
 
 . { errorLine = yyline+1; errorColumn = yycolumn+1; errorString = new StringBuilder(); errorString.append(yytext()); yybegin(ERROR); }
 <ERROR> {
-" " { logger.error("Leksicka greska ("+errorString.toString()+") u liniji "+errorLine+" i koloni " + errorColumn); yybegin(YYINITIAL);}
-"\b" {logger.error("Leksicka greska ("+errorString.toString()+") u liniji "+errorLine+" i koloni " + errorColumn); yybegin(YYINITIAL);}
-"\t" {logger.error("Leksicka greska ("+errorString.toString()+") u liniji "+errorLine+" i koloni " + errorColumn); yybegin(YYINITIAL);}
-"\r\n" {logger.error("Leksicka greska ("+errorString.toString()+") u liniji "+errorLine+" i koloni " + errorColumn); yybegin(YYINITIAL);}
-"\f" {logger.error("Leksicka greska ("+errorString.toString()+") u liniji "+errorLine+" i koloni " + errorColumn); yybegin(YYINITIAL);}
+" " { ps.println("Leksicka greska ("+errorString.toString()+") u liniji "+errorLine+" i koloni " + errorColumn); yybegin(YYINITIAL);}
+"\b" {ps.println("Leksicka greska ("+errorString.toString()+") u liniji "+errorLine+" i koloni " + errorColumn); yybegin(YYINITIAL);}
+"\t" {ps.println("Leksicka greska ("+errorString.toString()+") u liniji "+errorLine+" i koloni " + errorColumn); yybegin(YYINITIAL);}
+"\r\n" {ps.println("Leksicka greska ("+errorString.toString()+") u liniji "+errorLine+" i koloni " + errorColumn); yybegin(YYINITIAL);}
+"\f" {ps.println("Leksicka greska ("+errorString.toString()+") u liniji "+errorLine+" i koloni " + errorColumn); yybegin(YYINITIAL);}
 . { errorString.append(yytext()); }
 }
 
