@@ -1,0 +1,29 @@
+program MJProgram
+	int x;
+	int y;
+	int z[];
+	class A { int x2[];
+	{	
+		void calc() int a; {}
+		}
+	}
+	
+	class B extends A {
+	
+	}
+{	
+	
+	void calcProgram() {}
+	
+	int main()  int k[]; A a; {
+		a = new A;
+		while (i>5) {
+		print(1);
+		
+		print(2);//x=y+3+;
+		}
+	}
+}
+//true
+//"abc"
+//?! false

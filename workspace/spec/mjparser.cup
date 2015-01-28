@@ -13,11 +13,16 @@ parser code {:
 	int classCount = 0; //R43
 	int statementBlocks = 0; //R44
 	int funcCallsInMain = 0; //TODO: R45
+	int newStatementCount = 0; //R46
+	int classMethodCount = 0; //R47
+	int classFieldCount = 0; //R48
+	int classDerivationCount = 0; //R49
 
     // slede redefinisani metodi za prijavu gresaka radi izmene teksta poruke
     boolean greska;
      
    public void report_fatal_error(String message, Object   info) throws java.lang.Exception {
+   	  greska=true;
       done_parsing();
       report_error(message, info);
     }
@@ -46,6 +51,10 @@ parser code {:
     	System.out.println("Definicije funkcija u glavnom programu - " + funcCount);
     	System.out.println("Definicije unutrasnjih klasa - " + classCount);
     	System.out.println("Blokovi naredbi - " + statementBlocks);
+    	System.out.println("Naredbe stvaranja objekta - " + newStatementCount);
+    	System.out.println("Definicije metoda unutrasnjih klasa - " + classMethodCount);
+    	System.out.println("Definicije polja unutrasnjih klasa - " + classFieldCount);
+    	System.out.println("Izvodjenja klasa - " + classDerivationCount);
     }
     
     public static void main(String args[]) throws Exception {
@@ -53,12 +62,12 @@ parser code {:
         Yylex skener = new Yylex(r);
         MJParser p = new MJParser(skener);
         Symbol s = p.parse();  //pocetak parsiranja
-        p.printCounts();
         if (p.greska) 
         	System.out.println("Ulazni program ima gresaka!");
-        else 
+        else {
+        	p.printCounts();
         	System.out.println("Parsiranje uspesno zavrseno!");
-        
+        }
     }
     
 :}
@@ -67,7 +76,9 @@ parser code {:
 action code {:
 
 	boolean global = true;
-
+	boolean classDef = false;
+	boolean methodDef = false;
+	
 :}
 
 
@@ -84,11 +95,11 @@ terminal BREAK, INC, DEC, WHILE, CLASS, CHARCONST, BOOLCONST, STRCONST, ELSE, IF
 terminal Integer NUMBER ;
 terminal String IDENT ;
 
-non terminal Program, VarDeclList, MethodDeclList, VarDecl, Type, MethodDecl ;
+non terminal Program, VarDeclList, MethodDeclList, VarDecl, Type, MethodDecl, GlobalVarDecl, GlobalVarList ;
 non terminal FormPars, Addop, Factor ;
 non terminal StatementList, Statement, Designator, Expr, Term ;
 non terminal Unmatched, Matched ;
-non terminal Rhs, RhsElem, DeclarationList, DeclarationPart, ConstDecl, VarList, Var ;
+non terminal Rhs, DeclarationList, DeclarationPart, ConstDecl, VarList, Var, ConstPart ;
 non terminal ClassDecl, Ext, ClassMethods, Parameter, FormalParams, ReturnType, FunctionCall, IdentList, IdentRef ;
 non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Relop, Sign, AddList, MulList, Mulop, ActParams ;
 
@@ -103,19 +114,26 @@ DeclarationList	::=  DeclarationList DeclarationPart
 
 DeclarationPart	::=  ConstDecl
 					|    
-					VarDecl
+					GlobalVarDecl
 					|
 					ClassDecl
 					;
 
-ConstDecl ::= CONST Type IDENT EQUAL Rhs ;
-
-Rhs ::= Rhs COMMA RhsElem
-		|
-		RhsElem
-		;
-		
-RhsElem ::= NUMBER
+ConstDecl ::= CONST Type ConstPart SEMI
+				|
+			CONST error SEMI {: System.err.println("Uspesan oporavak od greske pri definiciji globalne promenljive konst1."); :}
+				 ;
+				 
+ConstPart ::= IDENT EQUAL Rhs
+				|
+				IDENT error
+				|
+			  ConstPart COMMA IDENT EQUAL Rhs
+			  //	|
+			 // 	error COMMA IDENT EQUAL Rhs {: System.err.println("Uspesan oporavak od greske pri definiciji globalne promenljive konst2."); :}
+				;
+				
+Rhs ::= NUMBER
 			|
 			CHARCONST
 			|
@@ -124,7 +142,24 @@ RhsElem ::= NUMBER
 			STRCONST
 			;
 
-VarDecl ::= Type VarList SEMI ;
+GlobalVarDecl ::= Type GlobalVarList SEMI
+				|
+			Type error SEMI {: System.err.println("Uspesan oporavak od greske pri definiciji globalne promenljive 1."); :}
+				;
+
+VarDecl ::= Type VarList SEMI
+				|
+			Type error SEMI {: System.err.println("Uspesan oporavak od greske pri deklaraciji lokalne promenljive/polja unutrasnje klase."); :}
+				|
+			Type error  {: System.err.println("Uspesan oporavak od greske pri deklaraciji lokalne promenljive/polja unutrasnje klase."); :}
+				;
+
+GlobalVarList ::= GlobalVarList COMMA Var
+					|
+					Var
+					| 
+					error COMMA Var {: System.err.println("Uspesan oporavak od greske pri definiciji globalne promenljive 2."); :}
+					;
 
 VarList ::= VarList COMMA Var
 					|
@@ -134,23 +169,35 @@ VarList ::= VarList COMMA Var
 Var ::= IDENT
 		|
 		IDENT LSQUARE RSQUARE {:
-			if (global)
+			if (global && !classDef)
 				parser.globalArrayCount++;
 		:}
 		;
 
 Type ::= IDENT ;
 
-ClassDecl ::= CLASS IDENT Ext LBRACE VarDeclList ClassMethods RBRACE {:
+ClassDecl ::= CLASS IDENT Ext LBRACE {:
+					classDef = true;
+				:} VarDeclList ClassMethods RBRACE {:
 					parser.classCount++;
-				:} ;
+					classDef = false;
+				:}
+				;
 
-Ext ::= EXTENDS Type
+Ext ::= EXTENDS Type {:
+			parser.classDerivationCount++;
+		:}
+		|
+		error {: System.err.println("Uspesan oporavak od greske pri deklaraciji prosirenja natklase."); :}
 		|
 		/* epsilon */
 		;
 		
-VarDeclList ::= VarDeclList VarDecl
+VarDeclList ::= VarDeclList VarDecl {:
+					if (classDef && !methodDef) {
+						parser.classFieldCount++;
+					}
+				:}
 				|
 				/* epsilon */
 				;
@@ -167,12 +214,18 @@ MethodDeclList ::= MethodDeclList MethodDecl
 					/* epsilon */
 					;
 
-MethodDecl ::= ReturnType IDENT LPAREN FormalParams RPAREN VarDeclList LBRACE StatementList RBRACE {:
-					if (!global)
+MethodDecl ::= ReturnType IDENT LPAREN FormalParams RPAREN {:
+					methodDef = true;
+				:} VarDeclList LBRACE StatementList RBRACE {:
+					methodDef = false;
+					if (!classDef)
 						parser.funcCount++;
+					else
+						parser.classMethodCount++;
 					
 					parser.statementBlocks++;
-				:} ;
+				:}
+				;
 
 ReturnType ::= Type
 				|
@@ -192,6 +245,8 @@ FormPars  ::=  FormPars COMMA Parameter
 Parameter  ::=  Type IDENT
 	            |
 	            Type IDENT LSQUARE RSQUARE
+	            |
+	            error {: System.err.println("Uspesan oporavak od greske pri deklaraciji formalnog parametra funkcije."); :}
 	            ;
 
 StatementList ::= StatementList Statement
@@ -205,6 +260,12 @@ Statement ::= Matched | Unmatched ;
 
 Matched ::= Designator DesignatorsFollowUp SEMI
 				|
+			Designator LPAREN ActParams RPAREN SEMI
+				|
+			Designator LPAREN error RPAREN SEMI {: System.err.println("Uspesan oporavak od greske pri zadavanju liste parametara u pozivu funkcije."); :}
+				|
+			Designator LPAREN error SEMI {:  System.err.println("Uspesan oporavak od greske pri pozivu funkcije."); :}
+				|
 				Designator EQUAL error SEMI
 				{: System.err.println("Uspesan oporavak od greske pri dodeli vrednosti."); :}
 				|
@@ -212,9 +273,13 @@ Matched ::= Designator DesignatorsFollowUp SEMI
 				|
 				RETURN SEMI
 				|
-				IF Condition Matched ELSE Matched
+				IF LPAREN Condition RPAREN Matched ELSE Matched
+				|
+				IF LPAREN error RPAREN Matched ELSE Matched {:  System.err.println("Uspesan oporavak od greske unutar izraza u if konstrukciji."); :}
 				|
 				WHILE LPAREN Condition RPAREN Matched
+				|
+				WHILE LPAREN error RPAREN Matched {: System.err.println("Uspesan oporavak od greske unutar izraza u while konstrukciji."); :}
 				|
 				BREAK SEMI
 				|
@@ -283,7 +348,9 @@ Factor ::= Designator FunctionCall
 			|
 			STRCONST
 			|
-			NEW Type
+			NEW Type {:
+				parser.newStatementCount++;
+			:}
 			|
 			NEW Type LSQUARE Expr RSQUARE
 			|
@@ -297,18 +364,22 @@ FunctionCall ::= LPAREN ActParams RPAREN
 				
 DesignatorsFollowUp ::= EQUAL Expr
 						|
-						LPAREN ActParams RPAREN
-						|
 						INC
 						|
 						DEC
 						;
 				
-Unmatched ::= IF Condition Statement
-			 | IF 
-			 Condition Matched ELSE Unmatched
+Unmatched ::= IF LPAREN Condition RPAREN Statement
+			 |
+			 IF LPAREN error RPAREN Statement {:  System.err.println("Uspesan oporavak od greske unutar izraza u if konstrukciji."); :}
+			 | 
+			 IF LPAREN Condition RPAREN Matched ELSE Unmatched
+			 |
+			 IF LPAREN error RPAREN Matched ELSE Unmatched {:  System.err.println("Uspesan oporavak od greske unutar izraza u if konstrukciji."); :}
 			 |
 			 WHILE LPAREN Condition RPAREN Unmatched
+			 |
+			 WHILE LPAREN error RPAREN Unmatched {: System.err.println("Uspesan oporavak od greske unutar izraza u while konstrukciji."); :}
 			 ;
 					
 Designator ::= IDENT IdentList;
@@ -321,6 +392,8 @@ IdentList ::= IdentList IdentRef
 IdentRef ::= DOT IDENT
 			|
 			LSQUARE Expr RSQUARE
+			|
+			LSQUARE error RSQUARE {:  System.err.println("Uspesan oporavak od greske pri indeksiranju niza."); :}
 			;
 
 Relop ::= IS_EQUAL
