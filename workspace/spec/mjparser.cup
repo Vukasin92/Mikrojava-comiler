@@ -2,6 +2,8 @@ package rs.ac.bg.etf.pp1.sv110059;
 
 import java_cup.runtime.*;
 import java.io.*;
+import rs.etf.pp1.symboltable.*;
+import rs.etf.pp1.symboltable.concepts.*;
 
 
 parser code {:
@@ -35,7 +37,7 @@ parser code {:
         report_fatal_error("Fatalna greska, parsiranje se ne moze nastaviti", cur_token);
     }
 
-  public void report_error(String message, Object info)
+    public void report_error(String message, Object info)
     {
       greska=true;
       System.err.print(message);
@@ -43,6 +45,15 @@ parser code {:
       if (info instanceof Symbol)
           System.err.println(" na liniji " + ((Symbol)info).left);
       else System.err.println("");
+    }
+    
+    public void report_info(String message, Object info)
+    {
+      System.out.print(message);
+      System.out.flush();
+      if (info instanceof Symbol)
+          System.out.println(" na liniji " + ((Symbol)info).left);
+      else System.out.println("");
     }
     
     public void printCounts() {
@@ -62,6 +73,7 @@ parser code {:
         Yylex skener = new Yylex(r);
         MJParser p = new MJParser(skener);
         Symbol s = p.parse();  //pocetak parsiranja
+        Tab.dump();
         if (p.greska) 
         	System.out.println("Ulazni program ima gresaka!");
         else {
@@ -78,9 +90,16 @@ action code {:
 	boolean global = true;
 	boolean classDef = false;
 	boolean methodDef = false;
+	Struct var_type=Tab.noType;
+	Obj currentMethod = null;
+	boolean returnFound = false;
+	int currentLevel = -1;
 	
 :}
 
+init with {:
+	Tab.init();
+:}
 
 scan with {:
 	Symbol s = this.getScanner().next_token();
@@ -95,17 +114,33 @@ terminal BREAK, INC, DEC, WHILE, CLASS, CHARCONST, BOOLCONST, STRCONST, ELSE, IF
 terminal Integer NUMBER ;
 terminal String IDENT ;
 
-non terminal Program, VarDeclList, MethodDeclList, VarDecl, Type, MethodDecl, GlobalVarDecl, GlobalVarList ;
-non terminal FormPars, Addop, Factor ;
-non terminal StatementList, Statement, Designator, Expr, Term ;
+non terminal Program, VarDeclList, MethodDeclList, VarDecl, MethodDecl, GlobalVarDecl, GlobalVarList ;
+non terminal FormPars, Addop ;
+non terminal StatementList, Statement ;
 non terminal Unmatched, Matched ;
-non terminal Rhs, DeclarationList, DeclarationPart, ConstDecl, VarList, Var, ConstPart ;
-non terminal ClassDecl, Ext, ClassMethods, Parameter, FormalParams, ReturnType, FunctionCall, IdentList, IdentRef ;
-non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Relop, Sign, AddList, MulList, Mulop, ActParams ;
+non terminal Rhs, DeclarationList, DeclarationPart, ConstDecl, VarList, ConstPart ;
+non terminal ClassDecl, Ext, ClassMethods, Parameter, FormalParams, IdentList, IdentRef ;
+non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Relop, Sign, Mulop, ActParams ;
+non terminal String Var;
 
-Program ::= PROGRAM IDENT DeclarationList LBRACE {:
+non terminal Obj ProgName, Designator;
+non terminal Struct Type, ReturnType, Term, Expr, Factor, AddList, MulList;
+
+Program ::= PROGRAM ProgName:p DeclarationList LBRACE {:
 						global = false;
-					:} MethodDeclList RBRACE ;
+					:} MethodDeclList RBRACE
+{:
+	Tab.chainLocalSymbols(p);
+	Tab.closeScope();
+	currentLevel--;
+:};
+
+ProgName ::= IDENT:pName
+{:
+	RESULT = Tab.insert(Obj.Prog, pName, Tab.noType);
+	Tab.openScope();
+	currentLevel++;
+:};
 
 DeclarationList	::=  DeclarationList DeclarationPart
 					|
@@ -121,7 +156,7 @@ DeclarationPart	::=  ConstDecl
 
 ConstDecl ::= CONST Type ConstPart SEMI
 				|
-			CONST error SEMI {: System.err.println("Uspesan oporavak od greske pri definiciji globalne promenljive konst1."); :}
+			CONST error:l SEMI {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri definiciji globalne promenljive tipa konstante",null); :}
 				 ;
 				 
 ConstPart ::= IDENT EQUAL Rhs
@@ -144,37 +179,101 @@ Rhs ::= NUMBER
 
 GlobalVarDecl ::= Type GlobalVarList SEMI
 				|
-			Type error SEMI {: System.err.println("Uspesan oporavak od greske pri definiciji globalne promenljive 1."); :}
-				;
+			Type:varType error:l SEMI {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri definiciji globalne promenljive",null); :}
+			;
 
 VarDecl ::= Type VarList SEMI
 				|
-			Type error SEMI {: System.err.println("Uspesan oporavak od greske pri deklaraciji lokalne promenljive/polja unutrasnje klase."); :}
+			Type error:l SEMI {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri definiciji lokalne promenljive/polja unutrasnje klase",null); :}
 				|
-			Type error  {: System.err.println("Uspesan oporavak od greske pri deklaraciji lokalne promenljive/polja unutrasnje klase."); :}
+			Type error:l  {: parser.report_error("Izvrsen oporavak do { u liniji "+lleft+" pri definiciji lokalne promenljive/polja unutrasnje klase",null); :}
 				;
 
-GlobalVarList ::= GlobalVarList COMMA Var
+GlobalVarList ::= GlobalVarList COMMA Var:varName
+{:
+	Obj temp = Tab.find(varName);
+	if (temp.getLevel() == currentLevel) {
+		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
+	}
+	else {
+		Tab.insert(Obj.Var, varName, var_type);
+		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
+	}
+:}
 					|
-					Var
+					Var:varName
+{:
+	Obj temp = Tab.find(varName);
+	if (temp.getLevel() == currentLevel) {
+		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija globalne promenljive "+varName, null);
+	}
+	else {
+		Tab.insert(Obj.Var, varName, var_type);
+		parser.report_info("Deklarisana globalna promenljiva "+varName+" na liniji "+varNameleft, null);
+	}
+:}
 					| 
-					error COMMA Var {: System.err.println("Uspesan oporavak od greske pri definiciji globalne promenljive 2."); :}
+					error:l COMMA Var:varName 
+{: 
+Tab.insert(Obj.Var, varName, var_type); parser.report_error("Izvrsen oporavak do , u liniji "+lleft+" pri definiciji globalne promenljive",null); 
+:}
 					;
 
-VarList ::= VarList COMMA Var
+VarList ::= VarList COMMA Var:varName
+{:	
+	Obj temp = Tab.find(varName);
+	if (temp.getLevel() == currentLevel) {
+		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
+	}
+	else {
+		Tab.insert(Obj.Var, varName, var_type);
+		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
+	}
+:}
 					|
-					Var
+					Var:varName
+{:
+	Obj temp = Tab.find(varName);
+	if (temp.getLevel() == currentLevel) {
+		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
+	}
+	else {
+		Tab.insert(Obj.Var, varName, var_type);
+		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
+	}
+:}
 					;
 					
-Var ::= IDENT
+Var ::= IDENT:varName
+{:
+	RESULT = varName;
+:}
 		|
-		IDENT LSQUARE RSQUARE {:
+		IDENT:varName LSQUARE RSQUARE {:
 			if (global && !classDef)
 				parser.globalArrayCount++;
+			RESULT = varName;
 		:}
 		;
 
-Type ::= IDENT ;
+Type ::= IDENT:typeName
+{:
+	
+	Obj typeNode = Tab.find(typeName);
+	if (typeNode == Tab.noObj) {
+		parser.report_error("Semanticka greska na liniji "+typeNameleft+ ": Nije pronadjen tip " + typeName + " u tabeli simbola.", null);
+		var_type = RESULT = Tab.noType;
+	}
+	else {
+		if (Obj.Type == typeNode.getKind()) {
+			var_type = RESULT = typeNode.getType();
+		}
+		else {
+			parser.report_error("Semanticka greska na liniji "+typeNameleft+ ": Ime " + typeName + " ne predstavlja tip.", null);
+			var_type = RESULT = Tab.noType;
+		}
+	}
+:};
 
 ClassDecl ::= CLASS IDENT Ext LBRACE {:
 					classDef = true;
@@ -188,7 +287,7 @@ Ext ::= EXTENDS Type {:
 			parser.classDerivationCount++;
 		:}
 		|
-		error {: System.err.println("Uspesan oporavak od greske pri deklaraciji prosirenja natklase."); :}
+		error:l {: parser.report_error("Izvrsen oporavak do { u liniji "+lleft+" pri deklaraciji prosirenja natklase.",null); :}
 		|
 		/* epsilon */
 		;
@@ -214,16 +313,30 @@ MethodDeclList ::= MethodDeclList MethodDecl
 					/* epsilon */
 					;
 
-MethodDecl ::= ReturnType IDENT LPAREN FormalParams RPAREN {:
+MethodDecl ::= ReturnType:retType IDENT:methName 
+				{: 
+					currentMethod = Tab.insert(Obj.Meth, methName, retType);
+					Tab.openScope();
+					currentLevel++;
 					methodDef = true;
-				:} VarDeclList LBRACE StatementList RBRACE {:
+					parser.report_info("Obradjuje se funkcija na liniji "+methNameleft, null);
+				 :}
+				LPAREN FormalParams RPAREN VarDeclList LBRACE StatementList RBRACE {:
 					methodDef = false;
 					if (!classDef)
 						parser.funcCount++;
 					else
 						parser.classMethodCount++;
-					
 					parser.statementBlocks++;
+					
+					if (!returnFound && retType != Tab.noType) {
+						parser.report_error("Semanticka greska na liniji " +methNameleft+": funkcija "+methName+" nema return iskaz.", null);
+					}
+					returnFound = false;
+					currentMethod = null;
+					Tab.chainLocalSymbols(currentMethod);
+					Tab.closeScope();
+					currentLevel--;
 				:}
 				;
 
@@ -246,7 +359,7 @@ Parameter  ::=  Type IDENT
 	            |
 	            Type IDENT LSQUARE RSQUARE
 	            |
-	            error {: System.err.println("Uspesan oporavak od greske pri deklaraciji formalnog parametra funkcije."); :}
+	            error:l {: parser.report_error("Izvrsen oporavak do , ili ) u liniji "+lleft+" pri deklaraciji formalnog parametra funkcije",null); :}
 	            ;
 
 StatementList ::= StatementList Statement
@@ -258,28 +371,52 @@ Statement ::= Matched | Unmatched ;
 
  
 
-Matched ::= Designator DesignatorsFollowUp SEMI
+Matched ::= Designator:dest EQUAL Expr:e SEMI
+{:
+	if (!e.assignableTo(dest.getType())) {
+		parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+e+" ne moze biti dodeljen tipu "+dest.getType(),null);
+	}
+:}
 				|
-			Designator LPAREN ActParams RPAREN SEMI
+			Designator DesignatorsFollowUp SEMI
 				|
-			Designator LPAREN error RPAREN SEMI {: System.err.println("Uspesan oporavak od greske pri zadavanju liste parametara u pozivu funkcije."); :}
+			Designator:func LPAREN ActParams RPAREN SEMI
+{:
+	if (Obj.Meth == func.getKind()) {
+		parser.report_info("Pronadjen poziv funkcije "+func.getName()+" na liniji "+funcleft, null);
+		RESULT = func.getType();
+	}
+	else {
+		parser.report_error("Semanticka greska na liniji "+funcleft+": ime "+func.getName()+" nije funkcija.", null);
+		RESULT = Tab.noType;
+	}
+:}
 				|
-			Designator LPAREN error SEMI {:  System.err.println("Uspesan oporavak od greske pri pozivu funkcije."); :}
+			Designator LPAREN error:l RPAREN SEMI {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri zadavanju liste parametara u pozivu funkcije",null); :}
 				|
-				Designator EQUAL error SEMI
-				{: System.err.println("Uspesan oporavak od greske pri dodeli vrednosti."); :}
+			Designator LPAREN error:l SEMI {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri pozivu funkcije.",null); :}
 				|
-				RETURN Expr SEMI
+				Designator EQUAL error:l SEMI
+					{: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri iskazu dodele vrednosti.",null); :}
+				|
+				RETURN Expr:t SEMI 
+				{:
+					returnFound = true;
+					Struct currMethType = currentMethod.getType();
+					if (!currMethType.compatibleWith(t)) {
+						parser.report_error("Semanticka greska na liniji "+tleft+": tip izraza u return naredbi se ne slaze sa tipom povratne vrednosti funkcije "+currentMethod.getName(),null);
+					}
+				:}
 				|
 				RETURN SEMI
 				|
 				IF LPAREN Condition RPAREN Matched ELSE Matched
 				|
-				IF LPAREN error RPAREN Matched ELSE Matched {:  System.err.println("Uspesan oporavak od greske unutar izraza u if konstrukciji."); :}
+				IF LPAREN error:l RPAREN Matched ELSE Matched {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" unutar izraza u if konstrukciji.",null); :}
 				|
 				WHILE LPAREN Condition RPAREN Matched
 				|
-				WHILE LPAREN error RPAREN Matched {: System.err.println("Uspesan oporavak od greske unutar izraza u while konstrukciji."); :}
+				WHILE LPAREN error:l RPAREN Matched {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" unutar izraza u while konstrukciji.",null); :}
 				|
 				BREAK SEMI
 				|
@@ -322,25 +459,58 @@ CondFact ::= CondFact Relop Expr
 				Expr
 				;
 				
-Expr ::= Sign Term AddList ;
+Expr ::= Sign Term:te AddList:t
+{:
+	if (te.equals(t) && te==Tab.intType)
+		RESULT = te;
+	else {
+		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za sabiranje", null);
+		RESULT = Tab.noType;
+	}
+:} ;
 
 Sign ::= MINUS | /* epsilon */ ;
 
-AddList ::= AddList Addop Term
+AddList ::= AddList Addop Term:t
+{:
+	//semanticka provera kompatibilnosti tipova? epsilon smena?
+	RESULT = t;
+:}
 			|
 			/* epsilon */
 			;
 			
-Term ::= Factor MulList ;
+Term ::= Factor:te MulList:t
+{:
+	//uporedi te i t tipove - semanticka provera
+	RESULT = te;
+:} ;
 
-MulList ::= MulList Mulop Factor
+MulList ::= MulList Mulop Factor:t
+{:
+	//semanticka provera kompatibilnosti tipova? epsilon smena?
+	RESULT = t;
+:}
 			|
 			/* epsilon */
 			;
 			
-Factor ::= Designator FunctionCall
+Factor ::= Designator:func LPAREN ActParams RPAREN
+{:
+	if (Obj.Meth == func.getKind()) {
+		parser.report_info("Pronadjen poziv funkcije "+func.getName()+" na liniji "+funcleft, null);
+		RESULT = func.getType();
+	}
+	else {
+		parser.report_error("Semanticka greska na liniji "+funcleft+": ime "+func.getName()+" nije funkcija.", null);
+		RESULT = Tab.noType;
+	}
+	
+:}
 			|
-			NUMBER
+		   Designator:d {: RESULT = d.getType(); :}
+			|
+			NUMBER {: RESULT = Tab.intType; :}
 			|
 			CHARCONST
 			|
@@ -356,14 +526,8 @@ Factor ::= Designator FunctionCall
 			|
 			LPAREN Expr RPAREN
 			;
-
-FunctionCall ::= LPAREN ActParams RPAREN
-				|
-				/* epsilon */
-				;
 				
-DesignatorsFollowUp ::= EQUAL Expr
-						|
+DesignatorsFollowUp ::= 
 						INC
 						|
 						DEC
@@ -371,29 +535,36 @@ DesignatorsFollowUp ::= EQUAL Expr
 				
 Unmatched ::= IF LPAREN Condition RPAREN Statement
 			 |
-			 IF LPAREN error RPAREN Statement {:  System.err.println("Uspesan oporavak od greske unutar izraza u if konstrukciji."); :}
+			 IF LPAREN error:l RPAREN Statement {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" unutar izraza u if konstrukciji.",null); :}
 			 | 
 			 IF LPAREN Condition RPAREN Matched ELSE Unmatched
 			 |
-			 IF LPAREN error RPAREN Matched ELSE Unmatched {:  System.err.println("Uspesan oporavak od greske unutar izraza u if konstrukciji."); :}
+			 IF LPAREN error:l RPAREN Matched ELSE Unmatched {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" unutar izraza u if konstrukciji.",null); :}
 			 |
 			 WHILE LPAREN Condition RPAREN Unmatched
 			 |
-			 WHILE LPAREN error RPAREN Unmatched {: System.err.println("Uspesan oporavak od greske unutar izraza u while konstrukciji."); :}
+			 WHILE LPAREN error:l RPAREN Unmatched {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" unutar izraza u while konstrukciji.",null); :}
 			 ;
 					
-Designator ::= IDENT IdentList;
+Designator ::= IDENT:name
+{:
+	Obj obj = Tab.find(name);
+	if (obj == Tab.noObj) {
+		parser.report_error("Semanticka greska na liniji "+nameleft+": ime "+name+" nije deklarisano.", null);
+	}
+	RESULT = obj;
+:} IdentList;
 
 IdentList ::= IdentList IdentRef
 				|
 				/* epsilon */
 				;
 				
-IdentRef ::= DOT IDENT
+IdentRef ::= DOT IDENT:ident
 			|
 			LSQUARE Expr RSQUARE
 			|
-			LSQUARE error RSQUARE {:  System.err.println("Uspesan oporavak od greske pri indeksiranju niza."); :}
+			LSQUARE error:l RSQUARE {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri indeksiranju niza.",null); :}
 			;
 
 Relop ::= IS_EQUAL
