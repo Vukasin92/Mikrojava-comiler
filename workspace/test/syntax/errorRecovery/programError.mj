@@ -2,15 +2,16 @@
 
 program MJ
 	int x, y;
+	class A {
+		int a; {
+		
+		}
+	}
+	//A aa;
 {
-	//int k() int c; {
-		//c = 0;
-		//return c+3;
-	//}
-
-	void main()  { //sintaksna greska, oporavak do {
-		//x = y+3+5;
-		//k();
-		return 0;
+	int main() int x[]; {
+		//aa.a = 2;
+		x[2] = 2+4;
+		return 2*6;
 	}
 }

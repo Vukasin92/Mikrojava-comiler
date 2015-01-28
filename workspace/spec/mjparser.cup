@@ -72,7 +72,8 @@ parser code {:
         FileReader r = new FileReader(args[0]);
         Yylex skener = new Yylex(r);
         MJParser p = new MJParser(skener);
-        Symbol s = p.parse();  //pocetak parsiranja
+       // Symbol s = p.debug_parse();  //pocetak parsiranja
+       Symbol s = p.parse();
         Tab.dump();
         if (p.greska) 
         	System.out.println("Ulazni program ima gresaka!");
@@ -94,6 +95,8 @@ action code {:
 	Obj currentMethod = null;
 	boolean returnFound = false;
 	int currentLevel = -1;
+	boolean isVoid=false;
+	Obj curr_ident = null;
 	
 :}
 
@@ -115,13 +118,13 @@ terminal Integer NUMBER ;
 terminal String IDENT ;
 
 non terminal Program, VarDeclList, MethodDeclList, VarDecl, MethodDecl, GlobalVarDecl, GlobalVarList ;
-non terminal FormPars, Addop ;
+non terminal FormPars, Addop, Var ;
 non terminal StatementList, Statement ;
 non terminal Unmatched, Matched ;
 non terminal Rhs, DeclarationList, DeclarationPart, ConstDecl, VarList, ConstPart ;
 non terminal ClassDecl, Ext, ClassMethods, Parameter, FormalParams, IdentList, IdentRef ;
 non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Relop, Sign, Mulop, ActParams ;
-non terminal String Var;
+//non terminal String Var;
 
 non terminal Obj ProgName, Designator;
 non terminal Struct Type, ReturnType, Term, Expr, Factor, AddList, MulList;
@@ -189,71 +192,44 @@ VarDecl ::= Type VarList SEMI
 			Type error:l  {: parser.report_error("Izvrsen oporavak do { u liniji "+lleft+" pri definiciji lokalne promenljive/polja unutrasnje klase",null); :}
 				;
 
-GlobalVarList ::= GlobalVarList COMMA Var:varName
-{:
-	Obj temp = Tab.find(varName);
-	if (temp.getLevel() == currentLevel) {
-		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
-	}
-	else {
-		Tab.insert(Obj.Var, varName, var_type);
-		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
-	}
-:}
+GlobalVarList ::= GlobalVarList COMMA Var
 					|
 					Var:varName
-{:
-	Obj temp = Tab.find(varName);
-	if (temp.getLevel() == currentLevel) {
-		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija globalne promenljive "+varName, null);
-	}
-	else {
-		Tab.insert(Obj.Var, varName, var_type);
-		parser.report_info("Deklarisana globalna promenljiva "+varName+" na liniji "+varNameleft, null);
-	}
-:}
 					| 
-					error:l COMMA Var:varName 
-{: 
-Tab.insert(Obj.Var, varName, var_type); parser.report_error("Izvrsen oporavak do , u liniji "+lleft+" pri definiciji globalne promenljive",null); 
-:}
+					error:l COMMA Var 
 					;
 
-VarList ::= VarList COMMA Var:varName
-{:	
-	Obj temp = Tab.find(varName);
-	if (temp.getLevel() == currentLevel) {
-		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
-	}
-	else {
-		Tab.insert(Obj.Var, varName, var_type);
-		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
-	}
-:}
+VarList ::= VarList COMMA Var
 					|
-					Var:varName
-{:
-	Obj temp = Tab.find(varName);
-	if (temp.getLevel() == currentLevel) {
-		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
-	}
-	else {
-		Tab.insert(Obj.Var, varName, var_type);
-		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
-	}
-:}
+					Var
 					;
 					
 Var ::= IDENT:varName
 {:
-	RESULT = varName;
+	Obj temp = Tab.find(varName);
+	if (temp.getLevel() == currentLevel) {
+		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
+	}
+	else {
+		Tab.insert(Obj.Var, varName, var_type);
+		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
+	}
 :}
 		|
-		IDENT:varName LSQUARE RSQUARE {:
+		IDENT:varName LSQUARE RSQUARE 
+{:
 			if (global && !classDef)
 				parser.globalArrayCount++;
-			RESULT = varName;
-		:}
+
+			Obj temp = Tab.find(varName);
+			if (temp.getLevel() == currentLevel) {
+				parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
+			}
+			else {
+				Tab.insert(Obj.Var, varName, new Struct(Struct.Array, var_type));
+				parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
+			}
+:}
 		;
 
 Type ::= IDENT:typeName
@@ -333,16 +309,23 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 						parser.report_error("Semanticka greska na liniji " +methNameleft+": funkcija "+methName+" nema return iskaz.", null);
 					}
 					returnFound = false;
-					currentMethod = null;
 					Tab.chainLocalSymbols(currentMethod);
+					currentMethod = null;
 					Tab.closeScope();
 					currentLevel--;
 				:}
 				;
 
-ReturnType ::= Type
+ReturnType ::= Type:retType
+{:
+	RESULT = retType;
+:}
 				|
 				VOID
+{:
+	isVoid=true;
+	RESULT = Tab.noType;
+:}
 				;
 
 FormalParams ::= FormPars
@@ -373,8 +356,11 @@ Statement ::= Matched | Unmatched ;
 
 Matched ::= Designator:dest EQUAL Expr:e SEMI
 {:
-	if (!e.assignableTo(dest.getType())) {
+	if (!e.assignableTo(dest.getType()) && dest.getType().getKind() != Struct.Array) {
 		parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+e+" ne moze biti dodeljen tipu "+dest.getType(),null);
+	}
+	else if (!e.assignableTo(dest.getType().getElemType()) && dest.getType().getKind() == Struct.Array) {
+		parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+e+" ne moze biti dodeljen tipu "+dest.getType().getElemType(),null);
 	}
 :}
 				|
@@ -406,9 +392,18 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 					if (!currMethType.compatibleWith(t)) {
 						parser.report_error("Semanticka greska na liniji "+tleft+": tip izraza u return naredbi se ne slaze sa tipom povratne vrednosti funkcije "+currentMethod.getName(),null);
 					}
+					if (isVoid) {
+						parser.report_error("Semanticka greska na liniji "+tleft+": metod ne sme imati return sa izrazom jer je deklarisan sa void",null);
+					}
 				:}
 				|
-				RETURN SEMI
+				RETURN:dummy SEMI
+				{:
+					returnFound = true;
+					if (!isVoid) {
+						parser.report_error("Semnaticka greska u liniji "+dummyleft+": nedostaje return iskaz.", null);
+					}
+				:}
 				|
 				IF LPAREN Condition RPAREN Matched ELSE Matched
 				|
@@ -461,7 +456,7 @@ CondFact ::= CondFact Relop Expr
 				
 Expr ::= Sign Term:te AddList:t
 {:
-	if (te.equals(t) && te==Tab.intType)
+	if (t==Tab.noType || (te.equals(t) && te==Tab.intType))
 		RESULT = te;
 	else {
 		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za sabiranje", null);
@@ -471,28 +466,46 @@ Expr ::= Sign Term:te AddList:t
 
 Sign ::= MINUS | /* epsilon */ ;
 
-AddList ::= AddList Addop Term:t
+AddList ::= AddList:te Addop Term:t
 {:
-	//semanticka provera kompatibilnosti tipova? epsilon smena?
-	RESULT = t;
+	if (te==Tab.noType || (te.equals(t) && te==Tab.intType))
+		RESULT = t;
+	else {
+		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za sabiranje 2", null);
+		RESULT = Tab.noType;
+	}
 :}
 			|
 			/* epsilon */
+{:
+	RESULT = Tab.noType;
+:}
 			;
 			
 Term ::= Factor:te MulList:t
 {:
-	//uporedi te i t tipove - semanticka provera
-	RESULT = te;
+	if (t==Tab.noType || (te.equals(t) && te==Tab.intType))
+		RESULT = te;
+	else {
+		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za mnozenje 2", null);
+		RESULT = Tab.noType;
+	}
 :} ;
 
-MulList ::= MulList Mulop Factor:t
+MulList ::= MulList:te Mulop Factor:t
 {:
-	//semanticka provera kompatibilnosti tipova? epsilon smena?
-	RESULT = t;
+	if (te==Tab.noType || (te.equals(t) && te==Tab.intType))
+		RESULT = t;
+	else {
+		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za mnozenje", null);
+		RESULT = Tab.noType;
+	}
 :}
 			|
 			/* epsilon */
+{:
+	RESULT = Tab.noType;
+:}
 			;
 			
 Factor ::= Designator:func LPAREN ActParams RPAREN
@@ -553,16 +566,41 @@ Designator ::= IDENT:name
 		parser.report_error("Semanticka greska na liniji "+nameleft+": ime "+name+" nije deklarisano.", null);
 	}
 	RESULT = obj;
+	curr_ident = obj;
 :} IdentList;
 
-IdentList ::= IdentList IdentRef
+IdentList ::= IdentList:il IdentRef:ir 
+{: 
+	if (ir != null)
+		RESULT = ir;
+	else
+		RESULT = il;
+:}
 				|
-				/* epsilon */
+				/* epsilon */ {: RESULT = Tab.noObj; :}
 				;
 				
 IdentRef ::= DOT IDENT:ident
+			{:
+				if (curr_ident.getKind() == Struct.Class) {
+					Obj obj = Tab.find(ident);
+					if (obj == Tab.noObj) {
+						parser.report_error("Semanticka greska na liniji "+identleft+": ime "+ident+" nije deklarisano.", null);
+					}
+					RESULT = obj;
+					curr_ident = obj;
+					
+				}
+				else {
+					parser.report_error("Semanticka greska u liniji "+identleft+": "+curr_ident.getName()+" mora biti promenljiva klasnog tipa.",null);
+				}
+			:}
 			|
-			LSQUARE Expr RSQUARE
+			LSQUARE:dummy Expr RSQUARE
+			{:
+				 if (curr_ident.getType().getKind()!=Struct.Array) 
+                              parser.report_error("Semanticka greska u liniji "+dummyleft+": Ocekivan niz na mestu identifikatora "+curr_ident.getName(),null);
+			:}
 			|
 			LSQUARE error:l RSQUARE {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri indeksiranju niza.",null); :}
 			;
