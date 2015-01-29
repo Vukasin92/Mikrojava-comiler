@@ -20,7 +20,7 @@ import java.io.PrintStream;
 	private int errorColumn;
 	private StringBuilder errorString;
 	//private Logger logger = Logger.getLogger(MJTest.class);
-	private PrintStream ps = System.out;
+	private PrintStream ps = System.err;
 	
 	public PrintStream getPrintStream() {
 		return ps;

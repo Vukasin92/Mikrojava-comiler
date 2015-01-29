@@ -1,6 +1,7 @@
 // nivo A
 
 program MJ
+	const int m=2;
 	int x, y;
 	class A {
 		int a; {
@@ -9,8 +10,10 @@ program MJ
 	}
 	//A aa;
 {
-	int main() int x[]; {
+	int main(int a) int x[]; {
 		//aa.a = 2;
+		x = 2;
+		x = 2+m;
 		x[2] = 2+4;
 		return 2*6;
 	}
