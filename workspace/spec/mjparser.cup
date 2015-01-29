@@ -5,6 +5,8 @@ import java.io.*;
 import rs.etf.pp1.symboltable.*;
 import rs.etf.pp1.symboltable.concepts.*;
 import rs.etf.pp1.symboltable.visitors.*;
+import java.util.Collection;
+import rs.ac.bg.etf.pp1.sv110059.util.*;
 
 
 parser code {:
@@ -57,7 +59,7 @@ parser code {:
       else System.out.println("");
     }
    
-   	DumpSymbolTableVisitor dstv = new DumpSymbolTableVisitor();
+   	MyVisitor dstv = new MyVisitor();
    	
    	public void report_error(String symName, int line, String msg) {
    	  greska=true;
@@ -69,6 +71,7 @@ parser code {:
     public void report_info(String symName, int line, Obj obj) {
     	  dstv.visitObjNode(obj);
     	  System.out.print("Pretraga na "+line+"("+symName+"), nadjeno "+dstv.getOutput());
+    	  dstv.flush();
 	      System.out.flush();
 	      System.out.println("");
     }
@@ -157,9 +160,14 @@ action code {:
 	int currentLevel = -1;
 	boolean isVoid=false;
 	Obj curr_ident = null;
-	Obj[] actualParameters = null;
 	boolean designatorIsArrElem = false;
 	boolean insideWhile = false;
+	Obj currentDesignator = null;
+	Obj functionDesignator = null;
+	int numOfActPars = 0;
+	int currentMethodParams = 0;
+	boolean lockFunctionDesignator = false;
+	Obj previosDesignator = null;
 
 :}
 
@@ -185,14 +193,14 @@ terminal Integer NUMBER ;
 terminal String IDENT ;
 
 non terminal Program, VarDeclList, MethodDeclList, VarDecl, MethodDecl, GlobalVarDecl, GlobalVarList ;
-non terminal FormPars, Addop, Var ;
-non terminal StatementList, Statement ;
+non terminal FormPars, Var ;
+non terminal StatementList, Statement, ActPar ;
 non terminal Unmatched, Matched, WhileLoop ;
 non terminal DeclarationList, DeclarationPart, ConstDecl, VarList, ConstPart ;
 non terminal ClassDecl, Ext, ClassMethods, Parameter, FormalParams, IdentList, IdentRef ;
-non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Relop, Sign, Mulop, ActParams ;
+non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Sign, Mulop, ActParams ;
 //non terminal String Var, ConstVar;
-
+non terminal Integer Relop, Addop;
 non terminal Obj ProgName, Designator, ConstVar;
 non terminal Struct Type, ReturnType, Term, Expr, Factor, AddList, MulList, Rhs;
 
@@ -414,6 +422,7 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 						parser.report_error(methName, methNameleft, "duplikat imena u tabeli simbola");
 					}
 					currentMethod = Tab.insert(Obj.Meth, methName, retType);
+					currentMethodParams = 0;
 					Tab.openScope();
 					currentLevel++;
 					methodDef = true;
@@ -435,6 +444,8 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 					}
 					returnFound = false;
 					Tab.chainLocalSymbols(currentMethod);
+					lockFunctionDesignator = false;
+					currentMethod.setFpPos(currentMethodParams);
 					currentMethod = null;
 					Tab.closeScope();
 					currentLevel--;
@@ -478,6 +489,7 @@ Parameter  ::=  Type IDENT:varName
 		Tab.insert(Obj.Var, varName, var_type);
 		parser.report_info("Deklarisan parametar "+varName+" na liniji "+varNameleft, null);
 	}
+	currentMethodParams++;
 :}
 	            |
 	            Type IDENT:varName LSQUARE RSQUARE
@@ -623,33 +635,70 @@ WhileLoop ::= WHILE {:
 :}
 ;
 
+
 OptNumbers ::= COMMA NUMBER
 				|
 				/* epsilon */
 				;
 				
-ActParams ::= ActPars:params
+ActParams ::= ActPars:dummy
 {:
-		//provera na broj argumenata!!!
-		int i=0;
-	    for (Obj obj:currentMethod.getLocalSymbols()) {
-	    	if (actualParameters[i].getType() != obj.getType() || (obj.getType().getKind()==Struct.Array && actualParameters[i].getType().getElemType() != obj.getType().getElemType())) {
-	    		parser.report_error(obj.getName(), paramsleft, "nekompatibilni tipovi stvarnih sa formalnim parametrima");
-	    	}
-	    	else {
-	    		parser.report_info(obj.getName(), paramsleft, obj);
-	    	}
-	    	i++;
-	    }
+		int numOfFormPars = functionDesignator.getFpPos();
+		if (numOfFormPars != numOfActPars) {
+			parser.report_error("Greska : netacan broj stvarnih parametara u pozivu funkcije u liniji "+dummyleft, null);
+		}
 :}
 				|
 				/* epsilon */
+{:
+		
+		int numOfFormPars;
+		if (functionDesignator==null)
+			numOfFormPars = currentDesignator.getFpPos();
+		else
+			numOfFormPars = functionDesignator.getFpPos();
+		if (0 != numOfFormPars) {
+			parser.report_error("Greska : netacan broj stvarnih parametara u pozivu funkcije", null);
+		}
+:}
 				;
 				
-ActPars ::= ActPars COMMA Expr
+ActPars ::= ActPars COMMA ActPar
 			|
-			Expr
+			ActPar
 			;
+
+ActPar ::= Expr:e {:
+
+	if (!lockFunctionDesignator) {
+		lockFunctionDesignator = true;
+		functionDesignator = currentDesignator.getKind()<2 || currentDesignator.getKind()>3 ? previosDesignator : currentDesignator;
+	}
+
+	Obj obj = null;
+	int numOfFormPars = functionDesignator.getFpPos();
+	if (numOfActPars >= numOfFormPars) {
+		parser.report_error("Greska na liniji "+eleft+" vise stvarnih od formalnih parametara", null);
+	}
+	else {
+		int i=0;
+		Collection<Obj> col = functionDesignator.getLocalSymbols();
+		for (Obj o: col) {
+			if (i==numOfActPars) {
+				obj = o;
+				break;
+			}
+			i++;
+		}
+		if (e != obj.getType() || (obj.getType().getKind()==Struct.Array && e.getElemType() != obj.getType().getElemType())) {
+		    parser.report_error(obj.getName(), eleft, "nekompatibilni tipovi stvarnih sa formalnim parametrima");
+		}
+		else {
+	    	parser.report_info(obj.getName(), eleft, obj);
+		}
+	}
+	numOfActPars++;
+:};
 			
 Condition ::= Condition OR CondTerm
 				|
@@ -661,14 +710,27 @@ CondTerm ::= CondTerm AND CondFact
 				CondFact
 				;
 				
-CondFact ::= CondFact Relop Expr
+CondFact ::= Expr:tip1 Relop:uporedi Expr:tip2
+ {:
+   			 if (!tip1.assignableTo(tip2)){
+   				 parser.report_error(tip1.getName(), tip1left, "nekompatiblini tipovi");
+   			 }
+   			 else{
+   				 if (tip1.getKind() == Struct.Array || tip2.getKind() == Struct.Class){
+   					 if (uporedi > 1){
+   						 parser.report_error(tip1.getName(), tip1left, "uz promenljiva tipa klase ili niza se mogu koristiti samo != i ==");
+   					 }
+   				 }
+   			 }
+   		 :}
+
 				|
 				Expr
 				;
 				
 Expr ::= Sign Term:te AddList:t
 {:
-	if (t==Tab.noType || (te.equals(t) && te==Tab.intType))
+	if ((t==Tab.noType && te==Tab.intType) || (te.equals(t) && te==Tab.intType))
 		RESULT = te;
 	else {
 		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za sabiranje", null);
@@ -676,12 +738,21 @@ Expr ::= Sign Term:te AddList:t
 	}
 :} ;
 
-Sign ::= MINUS | /* epsilon */ ;
+Sign ::= MINUS  {:
+   			 RESULT = 0;
+   		 :}
+| /* epsilon */  {:
+   			 RESULT = 1;
+   		 :}
+;
 
-AddList ::= AddList:te Addop Term:t
+AddList ::= AddList:te Addop:ao Term:t
 {:
-	if (te==Tab.noType || (te.equals(t) && te==Tab.intType))
+	if ((te==Tab.noType && t==Tab.intType ) || (te.equals(t) && te==Tab.intType))
 		RESULT = t;
+	else if (ao==0 && ((te==Tab.noType && t==Tab.find("string") ) || (te.equals(t) && te==Tab.find("string"))) {
+		RESULT = t;
+	}
 	else {
 		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za sabiranje 2", null);
 		RESULT = Tab.noType;
@@ -696,7 +767,7 @@ AddList ::= AddList:te Addop Term:t
 			
 Term ::= Factor:te MulList:t
 {:
-	if (t==Tab.noType || (te.equals(t) && te==Tab.intType))
+	if ((t==Tab.noType && te==Tab.intType) || (te.equals(t) && te==Tab.intType))
 		RESULT = te;
 	else {
 		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za mnozenje 2", null);
@@ -706,7 +777,7 @@ Term ::= Factor:te MulList:t
 
 MulList ::= MulList:te Mulop Factor:t
 {:
-	if (te==Tab.noType || (te.equals(t) && te==Tab.intType))
+	if ((te==Tab.noType && te==Tab.intType) || (te.equals(t) && te==Tab.intType))
 		RESULT = t;
 	else {
 		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za mnozenje", null);
@@ -772,8 +843,10 @@ Unmatched ::= IF LPAREN Condition RPAREN Statement
 			 ;
 					
 Designator ::= IDENT:name
-{:
-	Obj obj = Tab.find(name);
+{:	
+	previosDesignator = currentDesignator;
+	Obj obj = currentDesignator = Tab.find(name);
+	numOfActPars = 0;
 	if (obj == Tab.noObj) {
 		parser.report_error(name, nameleft, "nije deklarisano");
 	}
@@ -797,7 +870,9 @@ IdentList ::= IdentList:il IdentRef:ir
 IdentRef ::= DOT IDENT:ident
 			{:
 				if (curr_ident.getKind() == Struct.Class) {
-					Obj obj = Tab.find(ident);
+					previosDesignator = currentDesignator;
+					Obj obj = currentDesignator = Tab.find(ident);
+					numOfActPars = 0;
 					if (obj == Tab.noObj) {
 						parser.report_error("Semanticka greska na liniji "+identleft+": ime "+ident+" nije deklarisano.", null);
 					}
@@ -825,21 +900,53 @@ IdentRef ::= DOT IDENT:ident
 			;
 
 Relop ::= IS_EQUAL
+ {:
+   			 RESULT = 0;
+   		 :}
+
 			|
 			NOT_EQUAL
+			 {:
+   			 RESULT = 1;
+   		 :}
+
 			|
 			GT
+			 {:
+   			 RESULT = 2;
+   		 :}
+
 			|
 			GTE
+			 {:
+   			 RESULT = 3;
+   		 :}
+
 			|
 			LT
+			 {:
+   			 RESULT = 4;
+   		 :}
+
 			|
 			LTE
+			 {:
+   			 RESULT = 5;
+   		 :}
+
 			;
 
 Addop ::= PLUS
+ {:
+   			 RESULT = 0;
+   		 :}
+
 			|
 			MINUS
+			 {:
+   			 RESULT = 1;
+   		 :}
+
 			;
 			
 Mulop ::= TIMES
