@@ -168,6 +168,7 @@ action code {:
 	int currentMethodParams = 0;
 	boolean lockFunctionDesignator = false;
 	Obj previosDesignator = null;
+	Obj currentClass = null;
 
 :}
 
@@ -198,11 +199,11 @@ non terminal StatementList, Statement, ActPar ;
 non terminal Unmatched, Matched, WhileLoop ;
 non terminal DeclarationList, DeclarationPart, ConstDecl, VarList, ConstPart ;
 non terminal ClassDecl, Ext, ClassMethods, Parameter, FormalParams, IdentList, IdentRef ;
-non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Sign, Mulop, ActParams ;
+non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Mulop, ActParams ;
 //non terminal String Var, ConstVar;
-non terminal Integer Relop, Addop;
+non terminal Integer Relop, Addop, Sign;
 non terminal Obj ProgName, Designator, ConstVar;
-non terminal Struct Type, ReturnType, Term, Expr, Factor, AddList, MulList, Rhs;
+non terminal Struct Type, ReturnType, Term, Expr, Factor, Rhs;
 
 Program ::= PROGRAM ProgName:p DeclarationList LBRACE {:
 						global = false;
@@ -368,18 +369,30 @@ Type ::= IDENT:typeName
 :};
 
 ClassDecl ::= CLASS IDENT:name Ext LBRACE {:
+					
 					classDef = true;
+
+					Struct s = new Struct(Struct.Class);
+
 					Obj tmp = Tab.find(name);
 					if (tmp != Tab.noObj) {
 						parser.report_error(name, nameleft, "duplikat naziva klase");
+						currentClass = Tab.noObj;
 					}
 					else {
-						Tab.insert(Obj.Type, name, Tab.nullType);
+						currentClass = Tab.insert(Obj.Type, name, s);
+						Tab.dump();
 					}
+					Tab.openScope();
+					currentLevel++;
 					
 				:} VarDeclList ClassMethods RBRACE {:
+					
 					parser.classCount++;
 					classDef = false;
+					Tab.chainLocalSymbols(currentClass.getType());
+					Tab.closeScope();
+					currentLevel--;
 				:}
 				;
 
@@ -713,12 +726,12 @@ CondTerm ::= CondTerm AND CondFact
 CondFact ::= Expr:tip1 Relop:uporedi Expr:tip2
  {:
    			 if (!tip1.assignableTo(tip2)){
-   				 parser.report_error(tip1.getName(), tip1left, "nekompatiblini tipovi");
+   				 parser.report_error(parser.getTypeName(tip1), tip1left, "nekompatiblini tipovi");
    			 }
    			 else{
    				 if (tip1.getKind() == Struct.Array || tip2.getKind() == Struct.Class){
    					 if (uporedi > 1){
-   						 parser.report_error(tip1.getName(), tip1left, "uz promenljiva tipa klase ili niza se mogu koristiti samo != i ==");
+   						 parser.report_error(parser.getTypeName(tip1), tip1left, "uz promenljiva tipa klase ili niza se mogu koristiti samo != i ==");
    					 }
    				 }
    			 }
@@ -728,15 +741,35 @@ CondFact ::= Expr:tip1 Relop:uporedi Expr:tip2
 				Expr
 				;
 				
-Expr ::= Sign Term:te AddList:t
+Expr ::= Sign:minus Term:tip1
+{:  
+		 if (minus == 0){
+   	     	 if (tip1.getKind() != Struct.Int){
+   	     		 parser.report_error(parser.getTypeName(tip1), tip1left, "pogresan tip pri operaciji negacije");
+   	     	 }
+   	      }
+   	      RESULT = tip1;
+
+:}
+	|
+	Expr:tip1 Addop:znak Term:tip2
 {:
-	if ((t==Tab.noType && te==Tab.intType) || (te.equals(t) && te==Tab.intType))
-		RESULT = te;
-	else {
-		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za sabiranje", null);
-		RESULT = Tab.noType;
-	}
-:} ;
+		if (znak == 0){
+   			 if( (tip1.getKind() == Struct.Int && tip2.getKind() == Struct.Int) || (tip1 == Tab.find("string").getType() && tip2 == Tab.find("string").getType() ) ){
+   			 }
+   			 else{
+   				 parser.report_error(parser.getTypeName(tip1), tip1left, "pogresni tipovi u operaciji sabiranja");
+   			 }
+   		 }
+   		 else{
+   			 if( tip1.getKind() != Struct.Int || tip2.getKind() != Struct.Int ){
+   				 parser.report_error(parser.getTypeName(tip1), tip1left, "pogresni tipovi u operaciji oduzimanja");
+   			 }
+   		 }
+   		 RESULT = tip1;
+
+:}
+;
 
 Sign ::= MINUS  {:
    			 RESULT = 0;
@@ -746,50 +779,22 @@ Sign ::= MINUS  {:
    		 :}
 ;
 
-AddList ::= AddList:te Addop:ao Term:t
-{:
-	if ((te==Tab.noType && t==Tab.intType ) || (te.equals(t) && te==Tab.intType))
-		RESULT = t;
-	else if (ao==0 && ((te==Tab.noType && t==Tab.find("string") ) || (te.equals(t) && te==Tab.find("string"))) {
-		RESULT = t;
-	}
-	else {
-		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za sabiranje 2", null);
-		RESULT = Tab.noType;
-	}
-:}
-			|
-			/* epsilon */
-{:
-	RESULT = Tab.noType;
-:}
-			;
 			
-Term ::= Factor:te MulList:t
-{:
-	if ((t==Tab.noType && te==Tab.intType) || (te.equals(t) && te==Tab.intType))
-		RESULT = te;
-	else {
-		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za mnozenje 2", null);
-		RESULT = Tab.noType;
-	}
-:} ;
+Term ::= Factor:tip1
+ {:
+   		 RESULT = tip1;
+ :}
 
-MulList ::= MulList:te Mulop Factor:t
-{:
-	if ((te==Tab.noType && te==Tab.intType) || (te.equals(t) && te==Tab.intType))
-		RESULT = t;
-	else {
-		parser.report_error("Semanticka greska na liniji "+teleft+": nekompatibilni tipovu u izrazu za mnozenje", null);
-		RESULT = Tab.noType;
-	}
-:}
-			|
-			/* epsilon */
-{:
-	RESULT = Tab.noType;
-:}
-			;
+	|
+	Term:tip1 Mulop Factor:tip2
+	 {:
+   		 if( tip1.getKind() != Struct.Int || tip2.getKind() != Struct.Int ){
+   			parser.report_error(parser.getTypeName(tip1), tip1left, "pogresni tipovi u operaciji mnozenja");
+   		 }
+   		 RESULT = tip1;
+   	 :}
+;
+
 			
 Factor ::= Designator:func LPAREN ActParams RPAREN
 {:
@@ -814,11 +819,20 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 			|
 			STRCONST {: RESULT = Tab.find("string").getType(); :}
 			|
-			NEW Type {:
+			NEW Type:tip1 {:
 				parser.newStatementCount++;
+	   			 if (tip1.getKind() != Struct.Class){
+	   				 parser.report_error(parser.getTypeName(tip1), tip1left, "nevalidan tip u operatoru NEW");
+	   			 }
+
 			:}
 			|
-			NEW Type LSQUARE Expr RSQUARE
+			NEW Type LSQUARE Expr:e RSQUARE
+			{:
+				if (e.getKind() != Struct.Int) {
+					parser.report_error(parser.getTypeName(e), eleft, "nevalidan tip expr u operatoru NEW[expr]");
+				}
+				:}
 			|
 			LPAREN Expr RPAREN
 			;
@@ -869,17 +883,30 @@ IdentList ::= IdentList:il IdentRef:ir
 				
 IdentRef ::= DOT IDENT:ident
 			{:
-				if (curr_ident.getKind() == Struct.Class) {
-					previosDesignator = currentDesignator;
-					Obj obj = currentDesignator = Tab.find(ident);
-					numOfActPars = 0;
-					if (obj == Tab.noObj) {
-						parser.report_error("Semanticka greska na liniji "+identleft+": ime "+ident+" nije deklarisano.", null);
+				if (curr_ident.getType() == Tab.nullType) {
+
+					Collection<Obj> polja = curr_ident.getType().getMembers();
+   					boolean pronasao = false;
+   					for(Obj polje: polja){
+   						if(ident.equals(polje.getName())){
+   							pronasao = true;
+   							break;
+   						}
+   					}
+   					if(!pronasao){
+   						parser.report_error(curr_ident.getName(), identleft, "pogresni tipovi u izrazu IDENT[.IDENT]");
+   					}
+   					else {
+						previosDesignator = currentDesignator;
+						Obj obj = currentDesignator = Tab.find(ident);
+						numOfActPars = 0;
+						if (obj == Tab.noObj) {
+							parser.report_error("Semanticka greska na liniji "+identleft+": ime "+ident+" nije deklarisano.", null);
+						}
+						RESULT = obj;
+						curr_ident = obj;
+						designatorIsArrElem = false;
 					}
-					RESULT = obj;
-					curr_ident = obj;
-					designatorIsArrElem = false;
-					
 				}
 				else {
 					parser.report_error("Semanticka greska u liniji "+identleft+": "+curr_ident.getName()+" mora biti promenljiva klasnog tipa.",null);

@@ -1,30 +1,13 @@
-// nivo A
-
 program MJ
-	const int m=3;
-	char c;
-	int x, y;
-	class B{}
-	class A extends B {
-		int a; {
+	class C {
+		int b; {
 		
 		}
 	}
-	A aa;
+	C aa;
 {
-	int k(int b) {
-		
-		return 2;
-	}
-	void main() int z[]; {
-		//aa.a = 2;
-		z[2] = 2;
-		x = 2+m;
-		k();
-		while (a) {
-		break;
-		print(2);
-		}
-		
+	
+	void main()  {
+		aa.b = 2;
 	}
 }
