@@ -12,12 +12,12 @@ import rs.ac.bg.etf.pp1.sv110059.util.*;
 parser code {:
 	//promenljive za brojanje pojavljivanja odredjenih elemenata
 	
-	int globalCharVarCount = 0; //TODO: R40
+	int globalCharVarCount = 0; //R40
 	int globalArrayCount = 0; //R41
 	int funcCount = 0; //R42
 	int classCount = 0; //R43
 	int statementBlocks = 0; //R44
-	int funcCallsInMain = 0; //TODO: R45
+	int funcCallsInMain = 0; //R45
 	int newStatementCount = 0; //R46
 	int classMethodCount = 0; //R47
 	int classFieldCount = 0; //R48
@@ -79,10 +79,12 @@ parser code {:
     
     public void printCounts() {
     	System.out.println("Broj elemenata: ");
+    	System.out.println("Deklaracije globalnih promenljivih tipa char - " + globalCharVarCount);
     	System.out.println("Deklaracije globalnih nizova - " + globalArrayCount);
     	System.out.println("Definicije funkcija u glavnom programu - " + funcCount);
     	System.out.println("Definicije unutrasnjih klasa - " + classCount);
     	System.out.println("Blokovi naredbi - " + statementBlocks);
+    	System.out.println("Pozivi funkcija u telu metode main - "+funcCallsInMain);
     	System.out.println("Naredbe stvaranja objekta - " + newStatementCount);
     	System.out.println("Definicije metoda unutrasnjih klasa - " + classMethodCount);
     	System.out.println("Definicije polja unutrasnjih klasa - " + classFieldCount);
@@ -153,6 +155,7 @@ action code {:
 
 	boolean global = true;
 	boolean classDef = false;
+	boolean isMain = false;
 	boolean methodDef = false;
 	Struct var_type=Tab.noType;
 	Obj currentMethod = null;
@@ -198,11 +201,11 @@ non terminal FormPars, Var ;
 non terminal StatementList, Statement, ActPar ;
 non terminal Unmatched, Matched, WhileLoop ;
 non terminal DeclarationList, DeclarationPart, ConstDecl, VarList, ConstPart ;
-non terminal ClassDecl, Ext, ClassMethods, Parameter, FormalParams, IdentList, IdentRef ;
+non terminal ClassDecl, Ext, ClassMethods, Parameter, FormalParams ;
 non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Mulop, ActParams ;
 //non terminal String Var, ConstVar;
 non terminal Integer Relop, Addop, Sign;
-non terminal Obj ProgName, Designator, ConstVar;
+non terminal Obj ProgName, Designator, ConstVar, IdentList, IdentRef;
 non terminal Struct Type, ReturnType, Term, Expr, Factor, Rhs;
 
 Program ::= PROGRAM ProgName:p DeclarationList LBRACE {:
@@ -330,6 +333,9 @@ Var ::= IDENT:varName
 	else {
 		Tab.insert(Obj.Var, varName, var_type);
 		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
+		if (var_type.getKind()==Struct.Char && global == true) {
+			parser.globalCharVarCount++;
+		}
 	}
 :}
 		|
@@ -443,6 +449,9 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 					if (currentMethod.getName().equals("main") && retType != Tab.noType) {
 						parser.report_error("Main funkcija mora imati povratni tip void", null);
 					}
+					if (methName.equals("main")) {
+						isMain = true;
+					}
 				 :}
 				LPAREN FormalParams RPAREN VarDeclList LBRACE StatementList RBRACE {:
 					methodDef = false;
@@ -462,6 +471,7 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 					currentMethod = null;
 					Tab.closeScope();
 					currentLevel--;
+					isMain = false;
 				:}
 				;
 
@@ -573,6 +583,9 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 	else {
 		parser.report_error("Semanticka greska na liniji "+funcleft+": ime "+func.getName()+" nije funkcija.", null);
 		RESULT = Tab.noType;
+	}
+	if (isMain) {
+		parser.funcCallsInMain++;
 	}
 :}
 				|
@@ -806,6 +819,9 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 		parser.report_error("Semanticka greska na liniji "+funcleft+": ime "+func.getName()+" nije funkcija.", null);
 		RESULT = Tab.noType;
 	}
+	if (isMain) {
+		parser.funcCallsInMain++;
+	}
 	
 :}
 			|
@@ -868,7 +884,12 @@ Designator ::= IDENT:name
 	RESULT = obj;
 	curr_ident = obj;
 	designatorIsArrElem = false;
-:} IdentList;
+:} IdentList:il {:
+	if (il != Tab.noObj) {
+		RESULT = il;
+	}
+:}
+;
 
 IdentList ::= IdentList:il IdentRef:ir 
 {: 
@@ -883,13 +904,14 @@ IdentList ::= IdentList:il IdentRef:ir
 				
 IdentRef ::= DOT IDENT:ident
 			{:
-				if (curr_ident.getType() == Tab.nullType) {
-
+				if (curr_ident.getType().getKind() == Struct.Class) {
+					Obj obj = Tab.noObj;
 					Collection<Obj> polja = curr_ident.getType().getMembers();
    					boolean pronasao = false;
    					for(Obj polje: polja){
    						if(ident.equals(polje.getName())){
    							pronasao = true;
+   							obj = polje;
    							break;
    						}
    					}
@@ -898,7 +920,7 @@ IdentRef ::= DOT IDENT:ident
    					}
    					else {
 						previosDesignator = currentDesignator;
-						Obj obj = currentDesignator = Tab.find(ident);
+						currentDesignator = obj;
 						numOfActPars = 0;
 						if (obj == Tab.noObj) {
 							parser.report_error("Semanticka greska na liniji "+identleft+": ime "+ident+" nije deklarisano.", null);

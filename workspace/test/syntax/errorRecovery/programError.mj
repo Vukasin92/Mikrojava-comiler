@@ -4,10 +4,15 @@ program MJ
 		
 		}
 	}
-	C aa;
+	class D {
+	
+	}
+	C c;
+	
 {
+
 	
 	void main()  {
-		aa.b = 2;
+		c.b = 2;
 	}
 }
