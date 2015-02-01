@@ -101,7 +101,7 @@ parser code {:
        // Symbol s = p.debug_parse();  //pocetak parsiranja
        Symbol s = p.parse();
        
-        if (p.greska) {
+        if (p.greska && !Code.greska) {
         	 Tab.dump();
         	System.out.println("Ulazni program ima gresaka!");
         }
@@ -179,6 +179,7 @@ action code {:
 	boolean lockFunctionDesignator = false;
 	Obj previosDesignator = null;
 	Obj currentClass = null;
+	boolean designatorInExpr = false;
 
 :}
 
@@ -199,9 +200,10 @@ scan with {:
 
 terminal PROGRAM, LBRACE, RBRACE, SEMI, LPAREN, RPAREN, COMMA, PRINT, RETURN, PLUS, EQUAL, VOID ;
 terminal EXTENDS, GT, GTE, LT, LTE, NEW, DIV, MOD, MINUS, NOT_EQUAL, IS_EQUAL, CONST, AND, LSQUARE, RSQUARE, OR, TIMES ;
-terminal BREAK, INC, DEC, WHILE, CLASS, CHARCONST, BOOLCONST, STRCONST, ELSE, IF, READ, DOT ;
+terminal BREAK, INC, DEC, WHILE, CLASS, BOOLCONST, STRCONST, ELSE, IF, READ, DOT ;
 terminal Integer NUMBER ;
 terminal String IDENT ;
+terminal Character CHARCONST ;
 
 non terminal Program, VarDeclList, MethodDeclList, VarDecl, MethodDecl, GlobalVarDecl, GlobalVarList ;
 non terminal FormPars, Var ;
@@ -220,6 +222,7 @@ Program ::= PROGRAM ProgName:p DeclarationList LBRACE {:
 					:} MethodDeclList RBRACE
 {:
 	
+	Code.dataSize = Tab.currentScope().getnVars();
 	Obj myMain = Tab.find("main");
 	if (myMain==Tab.noObj) {
 		parser.report_error("Greska : ulazni fajl ne sadrzi main metodu", null);
@@ -259,7 +262,7 @@ ConstPart ::= ConstVar:dest EQUAL Rhs:e
 	if (!e.assignableTo(dest.getType()) && dest.getType().getKind() != Struct.Array) {
 		parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e)+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType()),null);
 	}
-	else if (!e.assignableTo(dest.getType().getElemType()) && dest.getType().getKind() == Struct.Array) {
+	else if ((e.getElemType()!=dest.getType().getElemType() && !e.assignableTo(dest.getType().getElemType())) && dest.getType().getKind() == Struct.Array) {
 		parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e)+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType()),null);
 	}
 :}
@@ -274,7 +277,7 @@ ConstPart ::= ConstVar:dest EQUAL Rhs:e
 	if (!e.assignableTo(dest.getType()) && dest.getType().getKind() != Struct.Array) {
 		parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e)+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType().getElemType()),null);
 	}
-	else if (!e.assignableTo(dest.getType().getElemType()) && dest.getType().getKind() == Struct.Array) {
+	else if ((e.getElemType()!=dest.getType().getElemType() && !e.assignableTo(dest.getType().getElemType())) && dest.getType().getKind() == Struct.Array) {
 		parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e)+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType().getElemType()),null);
 	}
 :}
@@ -484,12 +487,22 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 					}
 					returnFound = false;
 					Tab.chainLocalSymbols(currentMethod);
-					lockFunctionDesignator = false;
+					
 					currentMethod.setFpPos(currentMethodParams);
+					if (currentMethod.getType() == Tab.noType) {
+						Code.put(Code.exit);
+						Code.put(Code.return_);
+					}
+					else {
+						 Code.put(Code.trap);
+						 Code.put(1);
+					}
 					currentMethod = null;
 					Tab.closeScope();
 					currentLevel--;
 					isMain = false;
+					isVoid = false;
+
 :}
 				;
 
@@ -562,18 +575,20 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 	if (!e.assignableTo(dest.getType()) && dest.getType().getKind() != Struct.Array) {
 		parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e)+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType()),null);
 	}
-	else if (!e.assignableTo(dest.getType().getElemType()) && dest.getType().getKind() == Struct.Array) {
+	else if ((e.getElemType()!=dest.getType().getElemType() && !e.assignableTo(dest.getType().getElemType())) && dest.getType().getKind() == Struct.Array) {
 		parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e)+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType()),null);
 	}
 	if (dest.getKind() == Obj.Con) {
 		parser.report_error(parser.getTypeName(dest.getType()), destleft, "ne moze se menjati vrednost konstantnom objektu");
 	}
-	if (dest.getKind() != Obj.Var && dest.getKind() != Obj.Fld) {
+	if (dest.getKind() != Obj.Var && dest.getKind() != Obj.Fld && dest.getKind() != Obj.Elem) {
 		parser.report_error(parser.getTypeName(dest.getType()), destleft, "designator mora biti promenljiva, element niza ili polje unutar objekta");
 	}
-	if (dest.getType().getKind()==Struct.Array && !designatorIsArrElem) {
+	/*if (dest.getType().getKind()==Struct.Array && !designatorIsArrElem) {
 		parser.report_error(parser.getTypeName(dest.getType()), destleft, "designator mora biti promenljiva, element niza ili polje unutar objekta");
-	}
+	}*/
+	Code.store(dest);
+	designatorInExpr = false;
 :}
 				|
 			Designator:dest DesignatorsFollowUp SEMI
@@ -584,12 +599,12 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 	if (dest.getKind() == Obj.Con) {
 		parser.report_error(parser.getTypeName(dest.getType()), destleft, "ne moze se menjati vrednost konstantnom objektu");
 	}
-	if (dest.getKind() != Obj.Var && dest.getKind() != Obj.Fld) {
-		parser.report_error(parser.getTypeName(dest.getType()), destleft, "designatormora biti promenljiva, element niza ili polje unutar objekta");
-	}
-	if (dest.getType().getKind()==Struct.Array && !designatorIsArrElem) {
+	if (dest.getKind() != Obj.Var && dest.getKind() != Obj.Fld && dest.getKind() != Obj.Elem) {
 		parser.report_error(parser.getTypeName(dest.getType()), destleft, "designator mora biti promenljiva, element niza ili polje unutar objekta");
 	}
+	/*if (dest.getType().getKind()==Struct.Array && !designatorIsArrElem) {
+		parser.report_error(parser.getTypeName(dest.getType()), destleft, "designator mora biti promenljiva, element niza ili polje unutar objekta");
+	}*/
 :}
 				|
 			Designator:func LPAREN ActParams RPAREN SEMI
@@ -602,9 +617,17 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		parser.report_error("Semanticka greska na liniji "+funcleft+": ime "+func.getName()+" nije funkcija.", null);
 		RESULT = Tab.noType;
 	}
+	lockFunctionDesignator = false;
 	if (isMain) {
 		parser.funcCallsInMain++;
 	}
+	int destAdr = func.getAdr() - Code.pc;
+	Code.put(Code.call);
+	Code.put2(destAdr);
+	if (func.getType() != Tab.noType) {
+		Code.put(Code.pop);
+	}
+	numOfActPars = 0;
 :}
 				|
 			Designator LPAREN error:l RPAREN SEMI {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri zadavanju liste parametara u pozivu funkcije",null); :}
@@ -624,6 +647,11 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 					if (isVoid) {
 						parser.report_error("Semanticka greska na liniji "+tleft+": metod ne sme imati return sa izrazom jer je deklarisan sa void",null);
 					}
+					isVoid = false;
+					// generisanje koda
+	                Code.put(Code.exit);
+	                Code.put(Code.return_);
+	                designatorInExpr = false;
 				:}
 				|
 				RETURN:dummy SEMI
@@ -632,15 +660,19 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 					if (!isVoid) {
 						parser.report_error("Semnaticka greska u liniji "+dummyleft+": nedostaje return iskaz.", null);
 					}
+					isVoid = false;
+					// generisanje koda
+	              	Code.put(Code.exit);
+	                Code.put(Code.return_);
 				:}
 				|
 				IF LPAREN Condition RPAREN Matched ELSE Matched
 				|
-				IF LPAREN error:l RPAREN Matched ELSE Matched {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" unutar izraza u if konstrukciji.",null); :}
+				IF LPAREN error:l RPAREN Matched ELSE Matched {: parser.report_error("Izvrsen oporavak do ) u liniji "+lleft+" unutar izraza u if konstrukciji.",null); :}
 				|
 				WhileLoop  LPAREN Condition RPAREN Matched {: insideWhile = false; :}
 				|
-				WhileLoop LPAREN error:l RPAREN Matched {: insideWhile = false; parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" unutar izraza u while konstrukciji.",null); :}
+				WhileLoop LPAREN error:l RPAREN Matched {: insideWhile = false; parser.report_error("Izvrsen oporavak do ) u liniji "+lleft+" unutar izraza u while konstrukciji.",null); :}
 				|
 				BREAK:dummy SEMI
 				{:
@@ -654,12 +686,12 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 	if (dest.getType() != Tab.intType && dest.getType() != Tab.charType && dest.getType() != Tab.find("bool").getType() && dest.getType() != Tab.find("string").getType()) {
 		parser.report_error(dest.getName(), destleft, "u pozivu read(Designator) designator mora biti tipa int, char, bool ili string");
 	}
-	if (dest.getKind() != Obj.Var && dest.getKind() != Obj.Fld) {
+	if (dest.getKind() != Obj.Var && dest.getKind() != Obj.Fld && dest.getKind() != Obj.Elem) {
 		parser.report_error(parser.getTypeName(dest.getType()), destleft, "designator mora biti promenljiva, element niza ili polje unutar objekta");
 	}
-	if (dest.getType().getKind()==Struct.Array && !designatorIsArrElem) {
+	/*if (dest.getType().getKind()==Struct.Array && !designatorIsArrElem) {
 		parser.report_error(parser.getTypeName(dest.getType()), destleft, "designator mora biti promenljiva, element niza ili polje unutar objekta");
-	}
+	}*/
 :}
 				|
 				PRINT LPAREN Expr:dest OptNumbers RPAREN SEMI
@@ -675,6 +707,7 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		Code.loadConst(1);
 		Code.put(Code.bprint);
 	}
+	designatorInExpr = false;
 :}
 				|
 				LBRACE StatementList RBRACE  {:
@@ -724,7 +757,7 @@ ActPar ::= Expr:e {:
 
 	if (!lockFunctionDesignator) {
 		lockFunctionDesignator = true;
-		functionDesignator = currentDesignator.getKind()<2 || currentDesignator.getKind()>3 ? previosDesignator : currentDesignator;
+		functionDesignator = designatorInExpr ? previosDesignator : currentDesignator;
 	}
 
 	Obj obj = null;
@@ -750,6 +783,8 @@ ActPar ::= Expr:e {:
 		}
 	}
 	numOfActPars++;
+	designatorInExpr = false;
+	Code.put(Code.pop); //TODO: //stvarni parametri nisu implementirani, pa da ne ostanu na steku
 :};
 			
 Condition ::= Condition OR CondTerm
@@ -774,10 +809,11 @@ CondFact ::= Expr:tip1 Relop:uporedi Expr:tip2
    					 }
    				 }
    			 }
+   			 designatorInExpr = false;
    		 :}
 
 				|
-				Expr
+				Expr {: designatorInExpr = false; :}
 				;
 				
 Expr ::= Sign:minus Term:tip1
@@ -828,7 +864,7 @@ Term ::= Factor:tip1
 	Term:tip1 Mulop Factor:tip2
 	 {:
    		 if( tip1.getKind() != Struct.Int || tip2.getKind() != Struct.Int ){
-   			parser.report_error(parser.getTypeName(tip1), tip1left, "pogresni tipovi u operaciji mnozenja");
+   			parser.report_error(parser.getTypeName(tip1), tip1left, "pogresni tipovi u operaciji, dozvoljeno je koristiti samo operande tipa int");
    		 }
    		 RESULT = tip1;
    	 :}
@@ -845,30 +881,47 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 		parser.report_error("Semanticka greska na liniji "+funcleft+": ime "+func.getName()+" nije funkcija.", null);
 		RESULT = Tab.noType;
 	}
+	lockFunctionDesignator = false;
 	if (isMain) {
 		parser.funcCallsInMain++;
 	}
-	
+	if (func.getType() == Tab.noType) {
+		parser.report_error(func.getName(), funcleft, "ne moze se koristiti u izrazima jer nema povratnu vrednost");
+	}
+	int destAdr = func.getAdr() - Code.pc;
+	Code.put(Code.call);
+	Code.put2(destAdr);
+	designatorInExpr = true;
+	numOfActPars = 0;
+
 :}
 			|
-		   Designator:d {: RESULT = d.getType(); :}
+		   Designator:d {: RESULT = d.getType(); Code.load(d); designatorInExpr = true; :}
 			|
 			NUMBER:i 
 			{: 
-				//TODO: ako se postave 2 konstante sa istim imenom u istom scopu
-				Obj temp = Tab.find(""+i.intValue());
-				if (temp != Tab.noObj) {
+				
+				/*Obj temp = Tab.find(""+i.intValue());
+				if (temp == Tab.noObj) {
 					Obj c = Tab.insert(Obj.Con, ""+i.intValue(), Tab.intType);
 					c.setAdr(i.intValue());
 					Code.load(c);
 				}
 				else {
 					Code.load(temp);
-				}
-				RESULT = Tab.intType; 
+				}*/
+				Obj c = new Obj(Obj.Con, "", Tab.intType);
+                c.setAdr(i.intValue()); 
+                Code.load(c); 
+				RESULT = Tab.intType;
 			:}
 			|
-			CHARCONST {: RESULT = Tab.charType; :}
+			CHARCONST:c {: 
+				RESULT = Tab.charType;
+				Obj o = new Obj(Obj.Con, "", Tab.charType);
+                o.setAdr(c.charValue()); 
+                Code.load(o); 
+				:}
 			|
 			BOOLCONST {: RESULT = Tab.find("bool").getType(); :}
 			|
@@ -882,14 +935,21 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 
 			:}
 			|
-			NEW Type LSQUARE Expr:e RSQUARE
+			NEW Type:t LSQUARE Expr:e RSQUARE
 			{:
 				if (e.getKind() != Struct.Int) {
 					parser.report_error(parser.getTypeName(e), eleft, "nevalidan tip expr u operatoru NEW[expr]");
 				}
+				Code.put(Code.newarray);
+                if ( t == Tab.charType ) 
+                	Code.put(0); 
+                else 
+                	Code.put(1);
+                RESULT=new Struct(Struct.Array, t);
+                designatorInExpr = false;
 				:}
 			|
-			LPAREN Expr RPAREN
+			LPAREN Expr RPAREN {: designatorInExpr = false; :}
 			;
 				
 DesignatorsFollowUp ::= 
@@ -900,11 +960,11 @@ DesignatorsFollowUp ::=
 				
 Unmatched ::= IF LPAREN Condition RPAREN Statement
 			 |
-			 IF LPAREN error:l RPAREN Statement {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" unutar izraza u if konstrukciji.",null); :}
+			 IF LPAREN error:l RPAREN Statement {: parser.report_error("Izvrsen oporavak do ) u liniji "+lleft+" unutar izraza u if konstrukciji.",null); :}
 			 | 
 			 IF LPAREN Condition RPAREN Matched ELSE Unmatched
 			 |
-			 IF LPAREN error:l RPAREN Matched ELSE Unmatched {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" unutar izraza u if konstrukciji.",null); :}
+			 IF LPAREN error:l RPAREN Matched ELSE Unmatched {: parser.report_error("Izvrsen oporavak do ) u liniji "+lleft+" unutar izraza u if konstrukciji.",null); :}
 			 |
 			 WhileLoop LPAREN Condition RPAREN  Unmatched {: insideWhile = false; :}
 			 |
@@ -915,7 +975,7 @@ Designator ::= IDENT:name
 {:	
 	previosDesignator = currentDesignator;
 	Obj obj = currentDesignator = Tab.find(name);
-	numOfActPars = 0;
+	
 	if (obj == Tab.noObj) {
 		parser.report_error(name, nameleft, "nije deklarisano");
 	}
@@ -960,7 +1020,6 @@ IdentRef ::= DOT IDENT:ident
    					else {
 						previosDesignator = currentDesignator;
 						currentDesignator = obj;
-						numOfActPars = 0;
 						if (obj == Tab.noObj) {
 							parser.report_error("Semanticka greska na liniji "+identleft+": ime "+ident+" nije deklarisano.", null);
 						}
@@ -974,9 +1033,18 @@ IdentRef ::= DOT IDENT:ident
 				}
 			:}
 			|
-			LSQUARE:dummy Expr RSQUARE
+			LSQUARE:dummy Expr:e RSQUARE
 			{:
+				 // generisanje koda 
+				 if (e != Tab.intType) {
+				 	parser.report_error("Greska u liniji "+eleft+": indeks niza mora biti tipa int", null);
+				 }
+                 Code.load(currentDesignator);
+                 // dalje prenosimo element niza
+                 curr_ident = designatorInExpr ? previosDesignator : currentDesignator;
+                 RESULT=new Obj(Obj.Elem, "", curr_ident.getType().getElemType());
 				 designatorIsArrElem = true;
+				 designatorInExpr = false;
 				 if (curr_ident.getType().getKind()!=Struct.Array) 
                               parser.report_error("Semanticka greska u liniji "+dummyleft+": Ocekivan niz na mestu identifikatora "+curr_ident.getName(),null);
 			:}
