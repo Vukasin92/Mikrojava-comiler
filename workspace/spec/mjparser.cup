@@ -7,6 +7,7 @@ import rs.etf.pp1.symboltable.concepts.*;
 import rs.etf.pp1.symboltable.visitors.*;
 import java.util.Collection;
 import rs.ac.bg.etf.pp1.sv110059.util.*;
+import rs.etf.pp1.mj.runtime.*;
 
 
 parser code {:
@@ -43,6 +44,7 @@ parser code {:
     public void report_error(String message, Object info)
     {
       greska=true;
+      //Code.greska = true;
       System.err.print(message);
       System.err.flush();
       if (info instanceof Symbol)
@@ -63,6 +65,7 @@ parser code {:
    	
    	public void report_error(String symName, int line, String msg) {
    	  greska=true;
+   	  //Code.greska = true;
       System.err.print("Greska na "+line+"("+symName+"), "+msg);
       System.err.flush();
       System.err.println("");
@@ -103,6 +106,10 @@ parser code {:
         	System.out.println("Ulazni program ima gresaka!");
         }
         else {
+        	File objFile = new File("test/program.obj");
+        	if (objFile.exists())
+        		objFile.delete();
+        	Code.write(new FileOutputStream(objFile));
         	System.out.println("==================SINTAKSNA ANALIZA====================");
         	p.printCounts();
         	Tab.dump();
@@ -453,7 +460,18 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 						isMain = true;
 					}
 				 :}
-				LPAREN FormalParams RPAREN VarDeclList LBRACE StatementList RBRACE {:
+				LPAREN FormalParams RPAREN VarDeclList LBRACE
+{:
+	currentMethod.setAdr(Code.pc);
+	if (isMain) {
+		Code.mainPc = Code.pc;
+	}
+	Code.put(Code.enter);
+	Code.put(currentMethod.getLevel());
+	Code.put(Tab.currentScope().getnVars()); 
+:} 
+					StatementList RBRACE 
+{:
 					methodDef = false;
 					if (!classDef)
 						parser.funcCount++;
@@ -472,7 +490,7 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 					Tab.closeScope();
 					currentLevel--;
 					isMain = false;
-				:}
+:}
 				;
 
 ReturnType ::= Type:retType
@@ -648,6 +666,14 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 {:
 	if (dest != Tab.intType && dest != Tab.charType && dest != Tab.find("bool").getType() && dest != Tab.find("string").getType()) {
 		parser.report_error("Greska na liniji "+destleft+": u pozivu read(Expr, [, number]) expr mora biti tipa int, char, bool ili string", null);
+	}
+	if (dest == Tab.intType) {
+		Code.loadConst(5);
+		Code.put(Code.print);
+	}
+	if (dest == Tab.charType) {
+		Code.loadConst(1);
+		Code.put(Code.bprint);
 	}
 :}
 				|
@@ -827,7 +853,20 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 			|
 		   Designator:d {: RESULT = d.getType(); :}
 			|
-			NUMBER {: RESULT = Tab.intType; :}
+			NUMBER:i 
+			{: 
+				//TODO: ako se postave 2 konstante sa istim imenom u istom scopu
+				Obj temp = Tab.find(""+i.intValue());
+				if (temp != Tab.noObj) {
+					Obj c = Tab.insert(Obj.Con, ""+i.intValue(), Tab.intType);
+					c.setAdr(i.intValue());
+					Code.load(c);
+				}
+				else {
+					Code.load(temp);
+				}
+				RESULT = Tab.intType; 
+			:}
 			|
 			CHARCONST {: RESULT = Tab.charType; :}
 			|
