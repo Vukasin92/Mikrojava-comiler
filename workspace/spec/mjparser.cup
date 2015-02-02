@@ -104,7 +104,7 @@ parser code {:
         //Symbol s = p.debug_parse();  //pocetak parsiranja
         Symbol s = p.parse();
        
-        if (p.greska && !Code.greska) {
+        if (p.greska || !Code.greska) {
         	 Tab.dump();
         	System.out.println("Ulazni program ima gresaka!");
         }
@@ -184,7 +184,7 @@ action code {:
 	Obj currentClass = null;
 	boolean designatorInExpr = false;
 	Stack<Obj> designatorStack = new Stack<Obj>();
-
+	Stack<Boolean> designatorInExprStack = new Stack<Boolean>();
 	void redefineMethod() {
 		currentMethod.getLocalSymbols().clear();
 	}
@@ -215,6 +215,17 @@ action code {:
 	  } 
 	  addNameTerminator();   addFunctionAddress(functionAddressInCodeBuffer); 
  	} 
+
+ 	void resetDesignatorInExprCond() {
+ 		if (!designatorInExprStack.empty()) {
+ 			designatorInExpr = designatorInExprStack.pop();
+ 		}
+ 		else
+ 			designatorInExpr = false;
+ 	}
+ 	void setDesignatorInExprCond() {
+ 		designatorInExprStack.push(designatorInExpr);
+ 	}
 
 :}
 
@@ -250,7 +261,7 @@ non terminal Program, VarDeclList, MethodDeclList, VarDecl, MethodDecl, GlobalVa
 non terminal FormPars, Var ;
 non terminal StatementList, Statement, ActPar ;
 non terminal Unmatched, Matched, WhileLoop ;
-non terminal DeclarationList, DeclarationPart, ConstDecl, VarList, ConstPart ;
+non terminal DeclarationList, DeclarationPart, ConstDecl, VarList, ConstPart, VarDeclError ;
 non terminal ClassDecl, ClassMethods, Parameter, FormalParams ;
 non terminal DesignatorsFollowUp, Condition, OptNumbers, ActPars, CondTerm, CondFact, Mulop, ActParams ;
 //non terminal String Var, ConstVar;
@@ -369,10 +380,13 @@ GlobalVarDecl ::= Type GlobalVarList SEMI
 
 VarDecl ::= Type VarList SEMI
 				|
-			Type error:l SEMI {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri definiciji lokalne promenljive/polja unutrasnje klase",null); :}
-				|
-			Type error:l  {: parser.report_error("Izvrsen oporavak do { u liniji "+lleft+" pri definiciji lokalne promenljive/polja unutrasnje klase",null); :}
+			Type error:l VarDeclError {: parser.report_error("Izvrsen oporavak do ; ili { u liniji "+lleft+" pri definiciji lokalne promenljive/polja unutrasnje klase",null); :}
 				;
+
+VarDeclError ::= SEMI
+					|
+				/*epsilon*/
+					;
 
 GlobalVarList ::= GlobalVarList COMMA Var
 					|
@@ -415,7 +429,11 @@ Var ::= IDENT:varName
 				parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
 			}
 			else {
-				Tab.insert(Obj.Var, varName, new Struct(Struct.Array, var_type));
+				if (classDef) {
+					Tab.insert(Obj.Fld, varName, new Struct(Struct.Array, var_type));
+				}
+				else
+					Tab.insert(Obj.Var, varName, new Struct(Struct.Array, var_type));
 				parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
 			}
 :}
@@ -481,7 +499,7 @@ ClassDecl ::= CLASS IDENT:name Ext:ext LBRACE {:
 										Tab.insert(loc.getKind(), loc.getName(), loc.getType());
 									}
 								}
-								o.setFpPos(Tab.currentScope().getnVars());
+								o.setFpPos(obj.getFpPos());
 								Tab.chainLocalSymbols(o);
 								Tab.closeScope();
 								currentLevel--;
@@ -524,7 +542,7 @@ Ext ::= EXTENDS Type:t {:
 			RESULT = t;
 		:}
 		|
-		error:l {: parser.report_error("Izvrsen oporavak do { u liniji "+lleft+" pri deklaraciji prosirenja natklase.",null); :}
+		error:l {: parser.report_error("Izvrsen oporavak do { u liniji "+lleft+" pri deklaraciji prosirenja natklase.",null); RESULT = Tab.noType; :}
 		|
 		/* epsilon */ {: RESULT = Tab.noType; :}
 		;
@@ -749,7 +767,8 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 	Code.store(dest);
 	if (designatorInExpr) {
 		designatorStack.pop();
-		designatorInExpr = false;
+		//designatorInExpr = false;
+		resetDesignatorInExprCond();
 	}
 	
 :}
@@ -818,7 +837,8 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 	                Code.put(Code.return_);
 	              if (designatorInExpr) {
 					designatorStack.pop();
-					designatorInExpr = false;
+					//designatorInExpr = false;
+					resetDesignatorInExprCond();
 				}
 				:}
 				|
@@ -877,7 +897,8 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 	}
 	if (designatorInExpr) {
 		designatorStack.pop();
-		designatorInExpr = false;
+		//designatorInExpr = false;
+		resetDesignatorInExprCond();
 	}
 :}
 				|
@@ -981,7 +1002,8 @@ ActPar ::= Expr:e {:
 	numOfActPars++;
 	if (designatorInExpr) {
 		designatorStack.pop();
-		designatorInExpr = false;
+		//designatorInExpr = false;
+		resetDesignatorInExprCond();
 	}
 	Code.put(Code.pop); //TODO: //stvarni parametri nisu implementirani, pa da ne ostanu na steku
 :};
@@ -998,7 +1020,7 @@ CondTerm ::= CondTerm AND CondFact
 				
 CondFact ::= Expr:tip1 Relop:uporedi Expr:tip2
  {:
-   			 if (!tip1.assignableTo(tip2)){
+   			 if (!tip1.compatibleWith(tip2)){
    				 parser.report_error(parser.getTypeName(tip1), tip1left, "nekompatiblini tipovi");
    			 }
    			 else{
@@ -1010,7 +1032,8 @@ CondFact ::= Expr:tip1 Relop:uporedi Expr:tip2
    			 }
    			if (designatorInExpr) {
 				designatorStack.pop();
-				designatorInExpr = false;
+				//designatorInExpr = false;
+				resetDesignatorInExprCond();
 			}
    		 :}
 
@@ -1018,7 +1041,8 @@ CondFact ::= Expr:tip1 Relop:uporedi Expr:tip2
 				Expr {: 
 					if (designatorInExpr) {
 						designatorStack.pop();
-						designatorInExpr = false;
+						//designatorInExpr = false;
+						resetDesignatorInExprCond();
 					} 
 				:}
 				;
@@ -1098,13 +1122,18 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 	int destAdr = func.getAdr() - Code.pc;
 	Code.put(Code.call);
 	Code.put2(destAdr);
+	setDesignatorInExprCond();
 	designatorInExpr = true;
+	//designatorInExpr = true;
 	numOfActPars = 0;
 	functionDesignator = null;
 
 :}
 			|
-		   Designator:d {: RESULT = d.getType(); Code.load(d); designatorInExpr = true; :}
+		   Designator:d {: RESULT = d.getType(); Code.load(d); //designatorInExpr = true;
+		   	setDesignatorInExprCond();
+		   	designatorInExpr = true;
+		   	 :}
 			|
 			NUMBER:i 
 			{: 
@@ -1122,25 +1151,32 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
                 c.setAdr(i.intValue()); 
                 Code.load(c); 
 				RESULT = Tab.intType;
+				setDesignatorInExprCond();
+                designatorInExpr = false; 
 			:}
 			|
 			CHARCONST:c {: 
 				RESULT = Tab.charType;
 				Obj o = new Obj(Obj.Con, "", Tab.charType);
                 o.setAdr(c.charValue()); 
-                Code.load(o); 
+                Code.load(o);
+                setDesignatorInExprCond();
+                designatorInExpr = false; 
 				:}
 			|
-			BOOLCONST {: RESULT = Tab.find("bool").getType(); :}
+			BOOLCONST {: RESULT = Tab.find("bool").getType(); setDesignatorInExprCond();
+                designatorInExpr = false; :}
 			|
-			STRCONST {: RESULT = Tab.find("string").getType(); :}
+			STRCONST {: RESULT = Tab.find("string").getType(); setDesignatorInExprCond();
+                designatorInExpr = false; :}
 			|
 			NEW Type:tip1 {:
 				parser.newStatementCount++;
 	   			 if (tip1.getKind() != Struct.Class){
 	   				 parser.report_error(parser.getTypeName(tip1), tip1left, "nevalidan tip u operatoru NEW");
 	   			 }
-	   			 RESULT = tip1;
+	   			 RESULT = tip1; setDesignatorInExprCond();
+                designatorInExpr = false; 
 			:}
 			|
 			NEW Type:t LSQUARE Expr:e RSQUARE
@@ -1156,16 +1192,22 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
                 RESULT=new Struct(Struct.Array, t);
                if (designatorInExpr) {
 					designatorStack.pop();
-					designatorInExpr = false;
+					//designatorInExpr = false;
+					resetDesignatorInExprCond();
 				}
+				setDesignatorInExprCond();
+                designatorInExpr = false; 
 				:}
 			|
 			LPAREN Expr:e RPAREN {: 
 				RESULT = e;
 				if (designatorInExpr) {
 					designatorStack.pop();
-					designatorInExpr = false;
+					//designatorInExpr = false;
+					resetDesignatorInExprCond();
 				}
+				setDesignatorInExprCond();
+                designatorInExpr = false; 
 			 :}
 			;
 				
@@ -1244,6 +1286,10 @@ IdentRef ::= DOT IDENT:ident
    					else {
 						previosDesignator = currentDesignator;
 						currentDesignator = obj;
+						//if (designatorInExpr) {
+							designatorStack.pop();
+							//resetDesignatorInExprCond();
+						//}
 						designatorStack.push(obj);
 						if (obj == Tab.noObj) {
 							parser.report_error("Semanticka greska na liniji "+identleft+": ime "+ident+" nije deklarisano.", null);
@@ -1285,7 +1331,8 @@ IdentRef ::= DOT IDENT:ident
 				 designatorIsArrElem = true;
 				if (designatorInExpr) {
 					designatorStack.pop();
-					designatorInExpr = false;
+					//designatorInExpr = false;
+					resetDesignatorInExprCond();
 				}
 				 if (curr_ident.getType().getKind()!=Struct.Array) 
                               parser.report_error("Semanticka greska u liniji "+dummyleft+": Ocekivan niz na mestu identifikatora "+curr_ident.getName(),null);
