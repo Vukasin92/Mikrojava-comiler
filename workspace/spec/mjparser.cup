@@ -98,8 +98,8 @@ parser code {:
         FileReader r = new FileReader(args[0]);
         Yylex skener = new Yylex(r);
         MJParser p = new MJParser(skener);
-       // Symbol s = p.debug_parse();  //pocetak parsiranja
-       Symbol s = p.parse();
+        //Symbol s = p.debug_parse();  //pocetak parsiranja
+        Symbol s = p.parse();
        
         if (p.greska && !Code.greska) {
         	 Tab.dump();
@@ -190,7 +190,12 @@ init with {:
     Tab.insert(Obj.Type, "bool", boolType);
     Struct stringType = new Struct(Struct.Array, Tab.charType);
     Tab.insert(Obj.Type, "string", stringType);
-	
+	Obj o = Tab.find("len");
+	o.setFpPos(1);
+	o = Tab.find("chr");
+	o.setFpPos(1);
+	o = Tab.find("ord");
+	o.setFpPos(1);
 :}
 
 scan with {:
@@ -462,6 +467,10 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 					if (methName.equals("main")) {
 						isMain = true;
 					}
+					if (classDef) {
+						currentMethodParams++;
+						Tab.insert(Obj.Var, "this", currentClass.getType());
+					}
 				 :}
 				LPAREN FormalParams RPAREN VarDeclList LBRACE
 {:
@@ -628,6 +637,7 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		Code.put(Code.pop);
 	}
 	numOfActPars = 0;
+	functionDesignator = null;
 :}
 				|
 			Designator LPAREN error:l RPAREN SEMI {: parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri zadavanju liste parametara u pozivu funkcije",null); :}
@@ -738,11 +748,21 @@ ActParams ::= ActPars:dummy
 {:
 		
 		int numOfFormPars;
-		if (functionDesignator==null)
+		boolean containsThis = false;
+		if (functionDesignator==null) {
 			numOfFormPars = currentDesignator.getFpPos();
-		else
+			Collection<Obj> col = currentDesignator.getLocalSymbols();
+			for (Obj o: col) {
+				if (o.getName().equals("this")) {
+					containsThis = true;;
+				}
+			}
+		}
+		else {
 			numOfFormPars = functionDesignator.getFpPos();
-		if (0 != numOfFormPars) {
+			System.err.println("Greska? TODO");
+		}
+		if (0 != numOfFormPars && !(containsThis && numOfFormPars==1)) {
 			parser.report_error("Greska : netacan broj stvarnih parametara u pozivu funkcije", null);
 		}
 :}
@@ -769,13 +789,16 @@ ActPar ::= Expr:e {:
 		int i=0;
 		Collection<Obj> col = functionDesignator.getLocalSymbols();
 		for (Obj o: col) {
+			if (o.getName().equals("this")) {
+				numOfActPars++;
+			}
 			if (i==numOfActPars) {
 				obj = o;
 				break;
 			}
 			i++;
 		}
-		if (e != obj.getType() || (obj.getType().getKind()==Struct.Array && e.getElemType() != obj.getType().getElemType())) {
+		if (!e.assignableTo(obj.getType())) {
 		    parser.report_error(obj.getName(), eleft, "nekompatibilni tipovi stvarnih sa formalnim parametrima");
 		}
 		else {
@@ -893,6 +916,7 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 	Code.put2(destAdr);
 	designatorInExpr = true;
 	numOfActPars = 0;
+	functionDesignator = null;
 
 :}
 			|
@@ -932,7 +956,7 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 	   			 if (tip1.getKind() != Struct.Class){
 	   				 parser.report_error(parser.getTypeName(tip1), tip1left, "nevalidan tip u operatoru NEW");
 	   			 }
-
+	   			 RESULT = tip1;
 			:}
 			|
 			NEW Type:t LSQUARE Expr:e RSQUARE
@@ -949,7 +973,10 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
                 designatorInExpr = false;
 				:}
 			|
-			LPAREN Expr RPAREN {: designatorInExpr = false; :}
+			LPAREN Expr:e RPAREN {: 
+				RESULT = e;
+				designatorInExpr = false;
+			 :}
 			;
 				
 DesignatorsFollowUp ::= 
@@ -1014,6 +1041,10 @@ IdentRef ::= DOT IDENT:ident
    							break;
    						}
    					}
+   					if (curr_ident.getName().equals("this") && classDef) {
+						obj = Tab.find(ident);
+						pronasao = obj != Tab.noObj;
+					}
    					if(!pronasao){
    						parser.report_error(curr_ident.getName(), identleft, "pogresni tipovi u izrazu IDENT[.IDENT]");
    					}
@@ -1051,7 +1082,7 @@ IdentRef ::= DOT IDENT:ident
 			|
 			LSQUARE error:l RSQUARE {: 
 				designatorIsArrElem = true;
-				parser.report_error("Izvrsen oporavak do ; u liniji "+lleft+" pri indeksiranju niza.",null);
+				parser.report_error("Izvrsen oporavak do ] u liniji "+lleft+" pri indeksiranju niza.",null);
 			 :}
 			;
 
