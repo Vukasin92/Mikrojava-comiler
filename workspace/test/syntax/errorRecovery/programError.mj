@@ -1,16 +1,8 @@
 program MJ
 {
-
-	int func(int a) {
-		print(a);
-		return 1;
-	}
-
-	void main() int b; {
-		b = 2;
-		while (b<5 && b>1 || b==5 && 2==2 || b==6 && b==6 && b==6) {
-			print(b);
-			b++;
-		}
+	string s;
+	void main() {
+		read(s);
+		print(s);
 	}
 }
