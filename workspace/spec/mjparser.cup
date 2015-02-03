@@ -770,6 +770,7 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		//designatorInExpr = false;
 		resetDesignatorInExprCond();
 	}
+	//designatorStack.pop();
 	
 :}
 				|
@@ -1035,6 +1036,15 @@ CondFact ::= Expr:tip1 Relop:uporedi Expr:tip2
 				//designatorInExpr = false;
 				resetDesignatorInExprCond();
 			}
+			//TODO
+			/*if (!designatorInExprStack.empty()) {
+   		 		boolean e2des = designatorInExprStack.pop();
+   		 		boolean e1des = designatorInExprStack.pop();
+   		 		if (e2des || e1des) {
+   		 		designatorInExpr = true;
+   		 		setDesignatorInExprCond();  		 		
+   		 		}
+   		 	}*/
    		 :}
 
 				|
@@ -1073,7 +1083,14 @@ Expr ::= Sign:minus Term:tip1
    			 }
    		 }
    		 RESULT = tip1;
-
+   		 if (!designatorInExprStack.empty()) {
+   		 	boolean e2des = designatorInExprStack.pop();
+   		 	boolean e1des = designatorInExprStack.pop();
+   		 	if (e2des || e1des) {
+   		 		designatorInExpr = true;
+   		 		setDesignatorInExprCond();  		 		
+   		 	}
+   		 }
 :}
 ;
 
@@ -1098,7 +1115,17 @@ Term ::= Factor:tip1
    			parser.report_error(parser.getTypeName(tip1), tip1left, "pogresni tipovi u operaciji, dozvoljeno je koristiti samo operande tipa int");
    		 }
    		 RESULT = tip1;
+
+   		 if (!designatorInExprStack.empty()) {
+   		 	boolean e2des = designatorInExprStack.pop();
+   		 	boolean e1des = designatorInExprStack.pop();
+   		 	if (e2des || e1des) {
+   		 		designatorInExpr = true;
+   		 		setDesignatorInExprCond();
+   			}
+   		}
    	 :}
+   	 
 ;
 
 			
@@ -1213,8 +1240,20 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 				
 DesignatorsFollowUp ::= 
 						INC
+{:
+	Obj dsgn = designatorStack.peek();
+	Code.load(dsgn);
+	Code.put(Code.const_n+1);
+	Code.put(Code.add);
+:}
 						|
 						DEC
+{:
+	Obj dsgn = designatorStack.peek();
+	Code.load(dsgn);
+	Code.put(Code.const_n+1);
+	Code.put(Code.sub);
+:}
 						;
 				
 Unmatched ::= IF LPAREN Condition RPAREN Statement
@@ -1277,8 +1316,25 @@ IdentRef ::= DOT IDENT:ident
    						}
    					}
    					if (curr_ident.getName().equals("this") && classDef) {
-						obj = Tab.find(ident);
-						pronasao = obj != Tab.noObj;
+   						//TODO, napravi funckiju za proveravanje da li je trazeni simbol u local scopu
+   						/*obj = Tab.noObj;
+   						Collection<Obj> col = Tab.currentScope().getLocals().symbols();
+   						for (Obj c: col) {
+   							if (c.getName().equals(ident)) {
+   								pronasao = true;
+   								obj = c;
+   								break;
+   							}
+   						}*/
+						/*obj = Tab.find(ident);
+						boolean uslov;
+						if (obj.getKind()==Obj.Meth) {
+							//proveri tip this parametra
+						}
+						else {
+							uslov = obj.getLevel()==currentLevel-1;
+						}*/
+						pronasao = obj != Tab.noObj;// && uslov;
 					}
    					if(!pronasao){
    						parser.report_error(curr_ident.getName(), identleft, "pogresni tipovi u izrazu IDENT[.IDENT]");
