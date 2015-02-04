@@ -1,8 +1,13 @@
 program MJ
+string s1, s2, s3;
 {
-	string s;
-	void main() {
-		read(s);
-		print(s);
+	
+	void main() int b; {
+		s1 = "a";
+		s2 = "b";
+		s3 = s1+s2;
+		//read(s);
+		print(s3);
+		//b = 2;
 	}
 }

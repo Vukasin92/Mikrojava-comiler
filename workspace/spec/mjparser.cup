@@ -239,7 +239,7 @@ action code {:
 
 init with {:
 	Tab.init();
-	Code.dataSize = 200;
+	Code.dataSize = 0;
 	System.out.println("==================SEMANTICKA OBRADA====================");
 	Struct boolType = new Struct(Struct.Bool);
     Tab.insert(Obj.Type, "bool", boolType);
@@ -973,16 +973,20 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 			Code.put(Code.store_1);///inc count
 			Code.put(Code.load_n);//store char on stack
 			Code.put(Code.load_n);//compare with '\n'
-			Code.loadConst(10);///
+			Code.loadConst(13);///
 			Code.put(Code.jcc+Code.ne);//jump up if not equal
-			Code.loadConst(-11); //to XXX
+			Code.put2(-13); //to XXX
 			
-
-			Code.put(Code.store_1);//allocate array
+			Code.put(Code.pop);
+			Code.put(Code.load_1);//allocate array
 			Code.put(Code.newarray);
-			Code.loadConst(0);
-			Code.put(Code.load_2); //address of array
+			Code.put(0);
+			Code.put(Code.store_2); //address of array
 
+			Code.put(Code.load_1);
+			Code.loadConst(1);
+			Code.put(Code.sub);
+			Code.put(Code.store_1);
 			//put '\0'
 			Code.put(Code.load_2);
 			Code.put(Code.load_1);
@@ -995,7 +999,7 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 			Code.put(Code.load_1);
 			Code.loadConst(0);
 			Code.put(Code.jcc+Code.eq);//no elements, only '\0'
-			Code.loadConst(21); //to ZZZ //TODO: odrediti koliko je do ZZZ
+			Code.put2(17); //to ZZZ //TODO: odrediti koliko je do ZZZ
 
 			Code.put(Code.store_n);//take char from top of the stack : YYY
 			Code.put(Code.load_2);//put adr
@@ -1007,18 +1011,18 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 			Code.put(Code.sub);
 			Code.put(Code.store_1);
 			Code.put(Code.load_1);
-			Code.loadConst(0);
+			Code.loadConst(-1);
 			Code.put(Code.jcc+Code.ne);//do it again if there are more elements
-			Code.loadConst(-12); //to YYY	
+			Code.put2(-11); //to YYY	
 			
 			Code.put(Code.load_2);//return address of array  : ZZZ
 
 			Code.put(Code.exit);
-			Code.put(Code.return_);
 
+			Code.store(dest);
 			
 		}
-		else if (dest.getType() != Tab.charType) {
+		else if (dest.getType() == Tab.charType) {
 			Code.put(Code.bread);
 			Code.store(dest);
 		}
@@ -1055,18 +1059,18 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		Code.put(Code.load_n);
 		Code.loadConst('\0');
 		Code.put(Code.jcc+Code.eq);
-		Code.put(17); //to XXX
+		Code.put2(13); //to XXX
 		Code.put(Code.load_n);
+		Code.loadConst(1);
 		Code.put(Code.bprint);
 		Code.put(Code.load_1);
 		Code.loadConst(1);
 		Code.put(Code.add);
 		Code.put(Code.store_1);//inc count
 		Code.put(Code.jmp);
-		Code.put(-18); //to YYY
+		Code.put2(-16); //to YYY
 		//XXX
 		Code.put(Code.exit);
-		Code.put(Code.return_);
 	}
 	if (designatorInExpr) {
 		designatorStack.pop();
@@ -1334,12 +1338,135 @@ Expr ::= Sign:minus Term:tip1
    		 		setDesignatorInExprCond();  		 		
    		 	}
    		 }
+   		 if (tip1 == Tab.find("string").getType() && tip2 == Tab.find("string").getType() && znak == 0) {
+   		 	Code.put(Code.enter);
+   		 	Code.put(0);
+   		 	Code.put(6);
 
-   		 switch(znak) {
-   			case 0: Code.put(Code.add);
-   					break;
-   			case 1: Code.put(Code.sub);
-   					break;
+   		 	
+   		 	Code.put(Code.store_n);//adr
+   		 	Code.put(Code.store_3);//adr1
+   		 	//Code.put(Code.load_3);
+   		 	Code.put(Code.load_n);
+   		 	Code.put(Code.store);//adr2
+   		 	Code.put(4);
+   		 	//Code.put(Code.load);
+   		 	//Code.put(4);
+
+   		 	for (int i=0; i<2; i++, Code.put(Code.load_3), Code.put(Code.store_n), Code.loadConst(0), Code.put(Code.store), Code.put(5)) {
+   		 		Code.put(Code.load_n);
+   		 		Code.put(Code.load);//count
+   		 		Code.put(5);
+   		 		Code.put(Code.baload);
+   		 		Code.put(Code.store_1);//save value
+
+   		 		Code.put(Code.load);
+   		 		Code.put(5);
+   		 		Code.loadConst(1);
+   		 		Code.put(Code.add);
+   		 		Code.put(Code.store);//save incremented count
+   		 		Code.put(5);
+
+   		 		Code.put(Code.load_2);//whole count
+   		 		Code.loadConst(1);
+   		 		Code.put(Code.add);
+   		 		Code.put(Code.store_2);
+
+   		 		Code.put(Code.load_1);
+   		 		Code.loadConst('\0');
+   		 		Code.put(Code.jcc+Code.ne);
+   		 		Code.put2(-17);
+   		 	}
+
+   		 	Code.put(Code.load_2);//new count
+   		 	Code.loadConst(-1);
+   		 	Code.put(Code.add);
+   		 	Code.put(Code.store_2);
+
+
+   		 	Code.put(Code.load_2);
+   		 	Code.put(Code.newarray);
+   		 	Code.put(0);
+   		 	Code.put(Code.store);//dst array
+   		 	Code.put(5);
+   		 	//copy chars into new array
+   		 	Code.loadConst(0);//src index
+   		 	Code.put(Code.store_1);//src index
+   		 	Code.loadConst(0);//dst index
+   		 	Code.put(Code.store_2);//dst index
+   		 	Code.put(Code.load_3);//src array  YYY
+   		 	Code.put(Code.load_1);
+   		 	Code.put(Code.baload);
+   		 	Code.put(Code.store_n);
+
+   		 	Code.put(Code.load_n);
+   		 	Code.loadConst('\0');
+   		 	Code.put(Code.jcc+Code.eq);
+   		 	Code.put2(19);//to XXX
+
+   		 	Code.put(Code.load);
+   		 	Code.put(5);
+   		 	Code.put(Code.load_2);
+   		 	Code.put(Code.load_n);
+   		 	Code.put(Code.bastore);
+
+   		 	Code.put(Code.load_2);
+   		 	Code.loadConst(1);
+   		 	Code.put(Code.add);
+   		 	Code.put(Code.store_2);
+
+   		 	Code.put(Code.load_1);
+   		 	Code.loadConst(1);
+   		 	Code.put(Code.add);
+   		 	Code.put(Code.store_1);
+
+   		 	Code.put(Code.jmp);
+   		 	Code.put2(-22); //to YYY
+   		 	///XXX, second string copy
+   		 	Code.loadConst(0);//src index
+   		 	Code.put(Code.store_1);//src index
+   		 	Code.put(Code.load);//src array WWW
+   		 	Code.put(4);
+   		 	Code.put(Code.load_1);
+   		 	Code.put(Code.baload);
+   		 	Code.put(Code.store_n);
+
+   		 	Code.put(Code.load);
+   		 	Code.put(5);
+   		 	Code.put(Code.load_2);
+   		 	Code.put(Code.load_n);
+   		 	Code.put(Code.bastore);
+
+   		 	Code.put(Code.load_2);
+   		 	Code.loadConst(1);
+   		 	Code.put(Code.add);
+   		 	Code.put(Code.store_2);
+
+   		 	Code.put(Code.load_1);
+   		 	Code.loadConst(1);
+   		 	Code.put(Code.add);
+   		 	Code.put(Code.store_1);
+
+   		 	Code.put(Code.load_n);
+   		 	Code.loadConst('\0');
+   		 	Code.put(Code.jcc+Code.eq);
+   		 	Code.put2(6);//to ZZZ
+
+   		 	Code.put(Code.jmp);
+   		 	Code.put2(-23);//to WWW
+   		 	//ZZZ, end of copying
+   		 	Code.put(Code.load);
+   		 	Code.put(5);
+
+   		 	Code.put(Code.exit);
+   		 }
+   		 else {
+	   		 switch(znak) {
+	   			case 0: Code.put(Code.add);
+	   					break;
+	   			case 1: Code.put(Code.sub);
+	   					break;
+	   		}
    		}
 :}
 ;
@@ -1472,28 +1599,35 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 	RESULT = obj.getType(); 
 	setDesignatorInExprCond();
     designatorInExpr = false;
-    int size = s.length();
-    char[] cs = new char[size+1];
-    cs = s.toCharArray();
-    cs[size] = '\0';
+    int sz = s.length()-2;
+    char[] csTemp = new char[sz+2];
+    csTemp = s.toCharArray();
+
+    char[] cs = new char[sz+1];
+    for (int i=0; i<cs.length; i++) {
+    	cs[i] = csTemp[i+1];
+    }
+    cs[sz] = '\0';
     
     Code.put(Code.enter);
     Code.put(0);
-    Code.put(3);
-    Code.loadConst(size);
+    Code.put(1);
+    Code.loadConst(sz+1);
     Code.put(Code.newarray);
-    Code.put(Code.store_2);//addr of array
+    Code.put(0);
+    Code.put(Code.store_n);//addr of array
     
     int i = 0;
     for (char c: cs) {
-    	Code.put(Code.load_2);
+
+    	Code.put(Code.load_n);
 	    Code.loadConst(i);
 	    Code.loadConst(cs[i]);
 	    Code.put(Code.bastore);
 	    i++;
     }
-    Code.put(Code.load_2);
-
+    Code.put(Code.load_n);
+    Code.put(Code.exit);
     //Obj o = new Obj(Obj.Con, "", obj.getType());
    // o.setAdr(adr);
 :}
@@ -1606,7 +1740,9 @@ Designator ::= IDENT:name
 	RESULT = obj;
 	curr_ident = obj;
 	designatorIsArrElem = false;
-
+	if (obj.getType().getKind()==Struct.Array && obj.getType() != Tab.find("string").getType()) {
+		Code.load(curr_ident);
+	}
 
 :} IdentList:il {:
 	if (il != Tab.noObj) {
@@ -1685,10 +1821,7 @@ IdentRef ::= DOT IDENT:ident
 				}
 			:}
 			|
-			LSQUARE:dummy
-			{:
-				Code.load(curr_ident);
-				:}
+			LSQUARE:dummy 
 				 Expr:e RSQUARE
 			{:
 				 // generisanje koda 
