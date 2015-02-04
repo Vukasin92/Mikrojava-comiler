@@ -815,6 +815,7 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 {:
 	currentMethod.setAdr(Code.pc);
 	currentMethod.setLevel(currentMethodParams);
+	currentMethod.setFpPos(currentMethodParams);
 	if (isMain) {
 		Code.mainPc = Code.pc;
 		for (Byte b : codeBuff.getBuff()) {
@@ -840,7 +841,7 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 					returnFound = false;
 					Tab.chainLocalSymbols(currentMethod);
 					
-					currentMethod.setFpPos(currentMethodParams);
+					
 					if (currentMethod.getType() == Tab.noType) {
 						Code.put(Code.exit);
 						Code.put(Code.return_);
@@ -1326,6 +1327,25 @@ ActPar ::= Expr:e {:
 			break;
 		}
 		i++;
+	}
+	if (methodDef) {
+		if (Tab.currentScope().getLocals()!=null) {
+			Collection<Obj> col2 = Tab.currentScope().getLocals().symbols();
+			for (Obj o: col2) {
+				if (i<numOfActPars) {
+					i++;
+					continue;
+				}
+				if (o.getName().equals("this")) {
+						numOfActPars++;
+				}
+				if (i==numOfActPars) {
+					obj = o;
+					break;
+				}
+				i++;
+			}
+		}
 	}
 	if (numOfActPars >= numOfFormPars) {
 		parser.report_error("Greska na liniji "+eleft+" vise stvarnih od formalnih parametara", null);
