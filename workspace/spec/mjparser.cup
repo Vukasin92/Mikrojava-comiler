@@ -192,6 +192,63 @@ action code {:
 	Stack<Stack<Integer>> controlStacksF = new Stack<Stack<Integer>>();
 	Stack<Stack<Integer>> controlStacksB = new Stack<Stack<Integer>>();
 	Stack<Integer> breakJumps = new Stack<Integer>();
+	class CodeBuff {
+		 private  ArrayList<Byte> buff = new ArrayList<Byte>();
+		 public void put (int x)  {
+				buff.add((byte)x);
+		 }
+	    public void put2 (int x) { put(x>>8); put(x);  }
+	    public  void put4 (int x) { put2(x>>16); put2(x); }
+
+	    public  void loadConst (int n) {
+		    if (0<=n&&n<=5) put (Code.const_n+n);
+		    else if (n==-1) put (Code.const_m1);
+		    else  { put (Code.const_); put4 (n); }
+  		}
+  		public ArrayList<Byte> getBuff() {
+  			return buff;
+  		}
+  		public void store(Obj o) {
+		  	switch (o.getKind()) {
+
+		  	  case Obj.Con:
+		  	  	if (o.getLevel()==0) { // global variable 
+		            put(Code.putstatic); put2(o.getAdr()); 
+		            break;
+		        }
+		        // local variable 
+		        if (0 <= o.getAdr() && o.getAdr() <= 3) 
+		            put(Code.store_n + o.getAdr());
+		        else { 
+		        	  put(Code.store); put(o.getAdr()); 
+		        } 
+		        break;
+		      case Obj.Var:
+		        if (o.getLevel()==0) { // global variable 
+		            put(Code.putstatic); put2(o.getAdr()); 
+		            break;
+		        }
+		        // local variable 
+		        if (0 <= o.getAdr() && o.getAdr() <= 3) 
+		            put(Code.store_n + o.getAdr());
+		        else { 
+		        	  put(Code.store); put(o.getAdr()); 
+		        } 
+		        break;
+
+		      case Obj.Fld:
+		        put(Code.putfield); put2(o.getAdr()); 
+		        break;
+		        
+		      case Obj.Elem:
+		        if (o.getType().getKind() == Struct.Char) put(Code.bastore);
+		        else put(Code.astore); 
+		        break;
+		  	}
+  		}
+	}
+
+	CodeBuff codeBuff = new CodeBuff();
 
 	void redefineMethod() {
 		currentMethod.getLocalSymbols().clear();
@@ -338,6 +395,9 @@ ConstPart ::= ConstVar:dest EQUAL Rhs:e
 		g = true; parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e.getType())+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType()),null);
 	}
 	if (!g) {
+		if (dest.getType() == Tab.find("string").getType()) {
+			codeBuff.store(dest);
+		}
 		dest.setAdr(e.getAdr());
 	}
 		
@@ -363,8 +423,12 @@ ConstPart ::= ConstVar:dest EQUAL Rhs:e
 	else if (!substitution && (e.getType().getElemType()!=dest.getType().getElemType() && !e.getType().assignableTo(dest.getType().getElemType())) && dest.getType().getKind() == Struct.Array) {
 		g = false; parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e.getType())+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType().getElemType()),null);
 	}
-	if (!g)
+	if (!g) {
+		if (dest.getType() == Tab.find("string").getType()) {
+			codeBuff.store(dest);
+		}
 		dest.setAdr(e.getAdr());
+	}
 :}
 
 			  //	|
@@ -380,6 +444,9 @@ ConstVar ::= IDENT:varName
 		RESULT = Tab.noObj;
 	}
 	else {
+		if (var_type==Tab.find("string").getType()) {
+			Tab.insert(Obj.Var, varName+"__$#_", var_type);
+		}
 		Obj obj = Tab.insert(Obj.Con, varName, var_type);
 		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
 		RESULT = obj;
@@ -407,10 +474,10 @@ Rhs ::= NUMBER:i {:
 				:}
 			|
 			BOOLCONST:b {: 
-					Obj bool = RESULT = Tab.find("bool");
+					Obj bool = Tab.find("bool");
 					setDesignatorInExprCond();
 	                designatorInExpr = false; 
-	                Obj o = new Obj(Obj.Con, "", bool.getType());
+	                Obj o = RESULT = new Obj(Obj.Con, "", bool.getType());
 	                boolean bVal = b.booleanValue();
 	                if (bVal) {
 	                	o.setAdr(1);
@@ -420,7 +487,68 @@ Rhs ::= NUMBER:i {:
 	                }
                 :}
 			|
-			STRCONST {: RESULT = Tab.find("string"); :}//izmeniti po principu gornjih smena
+			STRCONST:s
+			{:
+
+				Obj obj = Tab.find("string");
+				Obj o = RESULT = new Obj(Obj.Var, "", obj.getType());
+				setDesignatorInExprCond();
+			    designatorInExpr = false;
+			    int sz = s.length()-2;
+			    char[] csTemp = new char[sz+2];
+			    csTemp = s.toCharArray();
+
+			    char[] cs = new char[sz+1];
+			    for (int i=0; i<cs.length; i++) {
+			    	cs[i] = csTemp[i+1];
+			    }
+			    cs[sz] = '\0';
+			    
+
+			    codeBuff.put(Code.enter);
+			    codeBuff.put(0);
+			    codeBuff.put(1);
+			    codeBuff.loadConst(sz+1);
+			    codeBuff.put(Code.newarray);
+			    codeBuff.put(0);
+			    codeBuff.put(Code.store_n);//addr of array
+			    
+			    int i = 0;
+			    for (char c: cs) {
+
+			    	codeBuff.put(Code.load_n);
+				    codeBuff.loadConst(i);
+				    codeBuff.loadConst(cs[i]);
+				    codeBuff.put(Code.bastore);
+				    i++;
+			    }
+			    codeBuff.put(Code.load_n);
+			    codeBuff.put(Code.exit);
+			    
+			    
+				/*Obj string = Tab.find("string");
+				Obj o = new Obj(Obj.Var, "", string.getType());
+				setDesignatorInExprCond();
+			    designatorInExpr = false;
+			    int sz = s.length()-2;
+			    char[] csTemp = new char[sz+2];
+			    csTemp = s.toCharArray();
+
+			    char[] cs = new char[sz+1];
+			    for (int i=0; i<cs.length; i++) {
+			    	cs[i] = csTemp[i+1];
+			    }
+			    cs[sz] = '\0';
+			    int adr = Code.dataSize;
+			    o.setAdr(adr);
+			    RESULT = o;
+			    for (char c: cs) {
+			    	Code.loadConst(c);
+			    	Code.put(Code.putstatic);
+			    	Code.put2(Code.dataSize);
+			    	Code.dataSize++;
+			    }*/
+			:}
 			;
 
 GlobalVarDecl ::= Type GlobalVarList SEMI
@@ -689,6 +817,9 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 	currentMethod.setLevel(currentMethodParams);
 	if (isMain) {
 		Code.mainPc = Code.pc;
+		for (Byte b : codeBuff.getBuff()) {
+			Code.buf[Code.pc++] = b;
+		}
 	}
 	Code.put(Code.enter);
 	Code.put(currentMethod.getLevel());
@@ -1022,6 +1153,10 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 			Code.store(dest);
 			
 		}
+		else if (dest.getType() == Tab.find("bool").getType()) {
+			Code.put(Code.read);
+			Code.store(dest);
+		}
 		else if (dest.getType() == Tab.charType) {
 			Code.put(Code.bread);
 			Code.store(dest);
@@ -1045,6 +1180,10 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 	if (dest == Tab.charType) {
 		Code.loadConst(1);
 		Code.put(Code.bprint);
+	}
+	if (dest == Tab.find("bool").getType()) {
+		Code.loadConst(5);
+		Code.put(Code.print);
 	}
 	if (dest == Tab.find("string").getType()) {
 		Code.put(Code.enter);
@@ -1282,6 +1421,82 @@ CondFact ::= Expr:tip1 Relop:uporedi Expr:tip2
    		 		setDesignatorInExprCond();  		 		
    		 		}
    		 	}*/
+   		 	if (tip1 == Tab.find("string").getType()) {
+   		 		/*skini adrese sa steka, stavi 0 na stek, uporedi stringove, i ako su jednaki, stavi 0, u suprotnom, stavi jedan*/
+   		 		Code.put(Code.enter);
+   		 		Code.put(0);
+   		 		Code.put(6);
+
+   		 		Code.put(Code.store_n);//adr1
+   		 		Code.put(Code.store_1);//adr2
+   		 		Code.loadConst(0);
+   		 		
+   		 		Code.loadConst(0);
+   		 		Code.put(Code.store_2);//count1
+   		 		Code.loadConst(0);
+   		 		Code.put(Code.store_3);//count2
+
+   		 		Code.put(Code.load_n);//YYY
+   		 		Code.put(Code.load_2);
+   		 		Code.put(Code.baload);
+   		 		Code.put(Code.store);
+   		 		Code.put(4);
+   		 		Code.put(Code.load);
+   		 		Code.put(4);
+   		 		Code.put(Code.load_1);
+   		 		Code.put(Code.load_3);
+   		 		Code.put(Code.baload);
+   		 		Code.put(Code.store);
+   		 		Code.put(5);
+   		 		Code.put(Code.load);
+   		 		Code.put(5);
+
+   		 		Code.put(Code.load_2);
+   		 		Code.loadConst(1);
+   		 		Code.put(Code.add);
+   		 		Code.put(Code.store_2);
+
+   		 		Code.put(Code.load_3);
+   		 		Code.loadConst(1);
+   		 		Code.put(Code.add);
+   		 		Code.put(Code.store_3);
+
+   		 		Code.put(Code.jcc+Code.ne);
+   		 		Code.put2(28);//to XXX
+
+   		 		Code.loadConst('\0');
+   		 		Code.put(Code.load);
+   		 		Code.put(4);
+   		 		Code.put(Code.sub);
+   		 		Code.put(Code.load);
+   		 		Code.put(5);
+   		 		Code.put(Code.jcc+Code.eq);
+   		 		Code.put2(23);//to ZZZ
+   		 		Code.put(Code.load);
+
+   		 		Code.loadConst('\0');
+   		 		Code.put(Code.load);
+   		 		Code.put(4);
+   		 		Code.put(Code.jcc+Code.eq);
+   		 		Code.put2(12); //to XXX
+   		 		Code.loadConst('\0');
+   		 		Code.put(Code.load);
+   		 		Code.put(5);
+   		 		Code.put(Code.jcc+Code.eq);
+   		 		Code.put2(6); //to XXX
+
+   		 		Code.put(Code.jmp);
+   		 		Code.put2(-47); //to YYY
+
+   		 		//XXX
+   		 		Code.loadConst(1);
+   		 		Code.put(Code.jmp);
+   		 		Code.put2(4); //to WWW
+   		 		//ZZZ
+   		 		Code.loadConst(0);
+   		 		//WWW
+   		 		Code.put(Code.exit);
+   		 	}
    		 :}
 
 				|
@@ -1294,8 +1509,8 @@ CondFact ::= Expr:tip1 Relop:uporedi Expr:tip2
 					if (e.getKind()!=Struct.Bool) {
 						parser.report_error(parser.getTypeName(e), eleft, "Uslov mora biti tipa bool");
 					}
-					Code.put(Code.const_n+1);
-					RESULT = 0; //Uporedi da li je ono sto je na steku (0 ili 1 za false ili true) jednako 1, ako jeste, uslov je tacan
+					Code.put(Code.const_n);
+					RESULT = 1; //Uporedi da li je ono sto je na steku (0 ili 1 za false ili true) jednako 1, ako jeste, uslov je tacan
 				:}
 				;
 				
@@ -1544,7 +1759,11 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 
 :}
 			|
-		   Designator:d {: RESULT = d.getType(); Code.load(d); //designatorInExpr = true;
+		   Designator:d {: RESULT = d.getType();
+		     if (d.getType()==Tab.find("string").getType() && d.getKind()==Obj.Con) 
+		     	Code.load(Tab.find(d.getName()+"__$#_"));
+		     else 
+		     	Code.load(d); //designatorInExpr = true;
 		   	setDesignatorInExprCond();
 		   	designatorInExpr = true;
 		   	 :}
@@ -1593,7 +1812,7 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
                 Code.load(o);
                 :}
 			|
-			STRCONST:s
+			STRCONST:s 
 {: 
 	Obj obj = Tab.find("string");
 	RESULT = obj.getType(); 
@@ -1730,7 +1949,9 @@ Designator ::= IDENT:name
 	previosDesignator = currentDesignator;
 
 	Obj obj = currentDesignator = Tab.find(name);
-	
+	/*if (obj.getType()==Tab.find("string").getType() && obj.getKind()==Obj.Con) {
+		obj = currentDesignator = Tab.find(name+"__$#_");
+	}*/
 	if (obj == Tab.noObj) {
 		parser.report_error(name, nameleft, "nije deklarisano");
 	}
@@ -1772,6 +1993,9 @@ IdentRef ::= DOT IDENT:ident
    						if(ident.equals(polje.getName())){
    							pronasao = true;
    							obj = polje;
+   							/*if (obj.getType()==Tab.find("string").getType() && obj.getKind()==Obj.Con) {
+								obj = Tab.find(name+"__$#_");
+							}*/
    							break;
    						}
    					}
@@ -1786,8 +2010,12 @@ IdentRef ::= DOT IDENT:ident
    								break;
    							}
    						}*/
-						/*obj = Tab.find(ident);
-						boolean uslov;
+						obj = Tab.find(ident);
+						/*if (obj.getType()==Tab.find("string").getType() && obj.getKind()==Obj.Con) {
+								obj = Tab.find(name+"__$#_");
+						}*/
+
+						/*boolean uslov;
 						if (obj.getKind()==Obj.Meth) {
 							//proveri tip this parametra
 						}
@@ -1804,6 +2032,9 @@ IdentRef ::= DOT IDENT:ident
 						currentDesignator = obj;
 						//if (designatorInExpr) {
 							Obj t = designatorStack.pop();
+							if (t.getType()==Tab.find("string").getType() && t.getKind()==Obj.Con) {
+								t = Tab.find(ident+"__$#_");
+							}
 							Code.load(t);
 							//resetDesignatorInExprCond();
 						//}
@@ -1814,6 +2045,7 @@ IdentRef ::= DOT IDENT:ident
 						RESULT = obj;
 						curr_ident = obj;
 						designatorIsArrElem = false;
+
 					}
 				}
 				else {
