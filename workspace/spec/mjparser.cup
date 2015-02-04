@@ -383,10 +383,13 @@ ConstPart ::= ConstVar:dest EQUAL Rhs:e
 {: 
 	boolean g =false;
 	boolean substitution = false;
-	if (e.getType().getKind()==Struct.Class) {
-		if (e.getType().getElemType() == dest.getType()) {
+	Struct eTemp = e.getType();
+	while (eTemp.getKind()==Struct.Class) {
+		if (eTemp.getElemType() == dest.getType()) {
 			substitution = true;
+			break;
 		}
+		eTemp = eTemp.getElemType();
 	}
 	if (!substitution && !e.getType().assignableTo(dest.getType()) && dest.getType().getKind() != Struct.Array) {
 		g = true; parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e.getType())+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType()),null);
@@ -678,6 +681,7 @@ ClassDecl ::= CLASS IDENT:name Ext:ext LBRACE {:
 									}
 								}
 								o.setFpPos(obj.getFpPos());
+								o.setLevel(obj.getLevel());
 								Tab.chainLocalSymbols(o);
 								Tab.closeScope();
 								currentLevel--;
@@ -768,20 +772,25 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 							redefinition = true;
 							boolean substitution = false;
 							Obj temp = currentMethod = new Obj(Obj.Meth, methName, retType);
-							if (temp.getType().getKind()==Struct.Class) {
-								if (temp.getType().getElemType() == superclassMeth.getType()) {
+							Struct eTemp = temp.getType();
+							while (eTemp.getKind()==Struct.Class) {
+								if (eTemp.getElemType() == superclassMeth.getType()) {
 									substitution = true;
+									break;
 								}
+								eTemp = eTemp.getElemType();
 							}
 							if (superclassMeth.getType().compatibleWith(temp.getType()) || substitution) {
-								Tab.openScope();
-								currentLevel++;
-								Collection<Obj> subclassLocals = currentClass.getType().getMembers();
+								
+								Collection<Obj> subclassLocals = Tab.currentScope().getLocals().symbols();
 								for (Obj subclassMember:subclassLocals) {
 									if (subclassMember.getName().equals(superclassMeth.getName())) {
 										currentMethod = subclassMember;
 										redefineMethod();
-										currentMethodParams++;
+										Tab.openScope();
+										currentLevel++;
+										currentMethod.setLevel(1);
+										//currentMethodParams++;
 										Tab.insert(Obj.Var, "this", currentClass.getType());
 										break;
 									}
@@ -797,12 +806,13 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 							parser.report_error(methName, methNameleft, "duplikat imena u tabeli simbola");
 						}
 						currentMethod = Tab.insert(Obj.Meth, methName, retType);
-						
-						currentMethodParams = 0;
+						currentMethod.setLevel(0);
+						//currentMethodParams = 0;
 						Tab.openScope();
 						currentLevel++;
 						if (classDef) {
-							currentMethodParams++;
+							currentMethod.setLevel(currentMethod.getLevel()+1);
+							//currentMethodParams++;
 							Tab.insert(Obj.Var, "this", currentClass.getType());
 						}
 						parser.report_info("Obradjuje se funkcija na liniji "+methNameleft, null);
@@ -814,8 +824,8 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 				LPAREN FormalParams RPAREN VarDeclList LBRACE
 {:
 	currentMethod.setAdr(Code.pc);
-	currentMethod.setLevel(currentMethodParams);
-	currentMethod.setFpPos(currentMethodParams);
+	//currentMethod.setLevel(currentMethodParams);
+	//currentMethod.setFpPos(currentMethodParams);
 	if (isMain) {
 		Code.mainPc = Code.pc;
 		for (Byte b : codeBuff.getBuff()) {
@@ -896,7 +906,8 @@ Parameter  ::=  Type IDENT:varName
 		Tab.insert(Obj.Var, varName, var_type);
 		parser.report_info("Deklarisan parametar "+varName+" na liniji "+varNameleft, null);
 	}
-	currentMethodParams++;
+	currentMethod.setLevel(currentMethod.getLevel()+1);
+	//currentMethodParams++;
 :}
 	            |
 	            Type IDENT:varName LSQUARE RSQUARE
@@ -927,11 +938,16 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 {:		
 		boolean g = false;
 		boolean substitution = false;
-		if (e.getKind()==Struct.Class) {
-			if (e.getElemType() == dest.getType()) {
+
+		Struct eTemp = e;
+		while (eTemp.getKind()==Struct.Class) {
+			if (eTemp.getElemType() == dest.getType()) {
 				substitution = true;
+				break;
 			}
+			eTemp = eTemp.getElemType();
 		}
+	
 		if (!substitution && !e.assignableTo(dest.getType()) && dest.getType().getKind() != Struct.Array) {
 			g = false; parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e)+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType()),null);
 		}
@@ -1258,7 +1274,8 @@ OptNumbers ::= COMMA NUMBER
 				
 ActParams ::= ActPars:dummy
 {:
-		int numOfFormPars = functionDesignator.getFpPos();
+		//int numOfFormPars = functionDesignator.getFpPos();
+		int numOfFormPars = functionDesignator.getLevel();
 		if (numOfFormPars != numOfActPars) {
 			parser.report_error("Greska : netacan broj stvarnih parametara u pozivu funkcije u liniji "+dummyleft, null);
 		}
@@ -1271,7 +1288,7 @@ ActParams ::= ActPars:dummy
 		boolean containsThis = false;
 		Obj func = designatorStack.peek();
 		if (functionDesignator==null) {
-			numOfFormPars = func.getFpPos();
+			numOfFormPars = func.getLevel();//func.getFpPos();
 			Collection<Obj> col = func.getLocalSymbols();
 			for (Obj o: col) {
 				if (o.getName().equals("this")) {
@@ -1280,7 +1297,7 @@ ActParams ::= ActPars:dummy
 			}
 		}
 		else {
-			numOfFormPars = functionDesignator.getFpPos();
+			numOfFormPars = func.getLevel();//functionDesignator.getFpPos();
 			System.err.println("Greska? TODO");
 		}
 		if (0 != numOfFormPars && !(containsThis && numOfFormPars==1)) {
@@ -1311,8 +1328,9 @@ ActPar ::= Expr:e {:
 
 	Obj obj = null;
 	
-	int numOfFormPars = functionDesignator.getFpPos();
+	int numOfFormPars = functionDesignator.getLevel();//functionDesignator.getFpPos();
 	int i=0;
+	boolean countedThis = false;
 	Collection<Obj> col = functionDesignator.getLocalSymbols();
 	for (Obj o: col) {
 		if (i<numOfActPars) {
@@ -1321,6 +1339,7 @@ ActPar ::= Expr:e {:
 		}
 		if (o.getName().equals("this")) {
 				numOfActPars++;
+				countedThis = true;
 		}
 		if (i==numOfActPars) {
 			obj = o;
@@ -1328,7 +1347,7 @@ ActPar ::= Expr:e {:
 		}
 		i++;
 	}
-	if (methodDef) {
+	if (methodDef && obj == null) {
 		if (Tab.currentScope().getLocals()!=null) {
 			Collection<Obj> col2 = Tab.currentScope().getLocals().symbols();
 			for (Obj o: col2) {
@@ -1336,7 +1355,7 @@ ActPar ::= Expr:e {:
 					i++;
 					continue;
 				}
-				if (o.getName().equals("this")) {
+				if (o.getName().equals("this") && !countedThis) {
 						numOfActPars++;
 				}
 				if (i==numOfActPars) {

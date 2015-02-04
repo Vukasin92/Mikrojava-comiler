@@ -1,53 +1,61 @@
-program Prilepi
-int fcache[];
-{
-	
-	int fibo(int n) {
-		if(n<=2)
-			return 1;
-		return fibo(n-1) + fibo(n-2);
-	}
+//nivo C
 
-	void initfibodyn()
-	int i;
-	{
-		fcache = new int[50];
-		i=0;
-		while(i<50) {
-			fcache[i] = -1;
-			i++;
+program test08
+
+	class Alfa extends Nepostojeca {  //semanticka, osnovna klasa ne postoji
+		int x;
+		char x;
+		real y;                       //semanticka, tip ne postoji 
+		y z;                          //semanticka, isto
+		char b;
+		{
+			void k(){
+				this.b = 'a';
+			}
+			
+			int f(int sss){        
+				this = 1;              //semanticka, ne poklapaju se tipovi
+				this.b = 1;            //semanticka, ne poklapaju se tipovi
+				this.zh = 2;           //semanticka, polje ne postoji
+				this.b = k();          //semanticka, metoda k() vraca void
+				return b;              //semanticka, ne poklapa se tip povratne vrednosti
+			}
+		}
+		
+	}
+	
+	class Beta{
+		int a,b;
+		{
+			void setA(){
+				read(a);
+			}
+			
+			void setAB(int aa, int bb){
+				a = aa;
+				b = bb;
+			}
 		}
 	}
-
-	int fibodyn(int n) {
-		if(n<=2) //trivial
-			return 1;
-		else if((n - 3) < 50) { //there is cache for this numbers
-			if(fcache[n-3] == -1)
-				fcache[n-3] = fibodyn(n-1)+fibodyn(n-2); //if not calc-ed, calc it
-			return fcache[n-3]; //return solution
-		} else //no cache for this numbers
-			return fibodyn(n-1) + fibodyn(n-2);
+	
+	class Gama extends Beta{
+		Beta b;
 	}
-
-	void main()
+	
+	Gama g;
+{
+	void main2()               //semanticka na kraju, nije definisana main fja
+	Alfa a;
 	{
-		initfibodyn();
-		print(fibo(10));
-		print(eol);
-		print(fibodyn(10));
-		print(eol);
-		print(fibodyn(15));
-		print(eol);
-		print(fibodyn(20));
-		print(eol);
-		print(fibodyn(25));
-		print(eol);
-		print(fibodyn(30));
-		print(eol);
-		print(fibodyn(35));
-		print(eol);
-		print(fibodyn(40));
-		print(eol);
+		a = new Alfa;
+		g = new Gama;
+		print(a.f((3 + 5)-4));
+		this = 3;               //semanticka, this nedeklarisan, ne poklapaju se tipovi
+		
+		g.setA(2);              //semanticka, broj parametara se ne poklapa (ovde je visak parametara)
+		g.setAB(2);              //semanticka, isto (ovde je manjak parametara)
+		g.setAB('a', 'b');       //semanticka, ne poklapaju se tipovi oba parametra
+		g.setAB('a',  5);        //semanticka, ne poklapa se tip prvog parametra
+		g.setAB( 5,  'b');       //semanticka, ne poklapa se tip drugog parametra
 	}
-} 
+}	
