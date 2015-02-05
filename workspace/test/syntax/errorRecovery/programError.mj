@@ -6,7 +6,7 @@ program test303
 		char p[];
 		{
 			void postaviIme(string ime){
-				this.ime = ime;
+				//this.ime = ime;
 			}
 			
 			void stampajGodinu(){
@@ -20,7 +20,8 @@ program test303
 		char z[];
 		{
 			void postaviIme(string ime){
-				this.ime = "Pekar " + ime;
+				//this.ime = "Pekar " + ime;
+				print('e');
 			}
 		}
 	}
@@ -29,7 +30,8 @@ program test303
 		Radnik pomocnik;
 		{
 			void postaviIme(string ime){
-				this.ime = "Poslasticar " + ime;
+				//this.ime = "Poslasticar " + ime;
+				print('o');
 			}
 		}
 	}
@@ -50,17 +52,13 @@ program test303
 	}
 
 	void main() Radnik r1, r2, r3; Pekar pe; Poslasticar ps;{
-		r1 = new Radnik;  
-		r2 = new Pekar;
-		r3 = new Poslasticar;
 		pe = new Pekar;
 		ps = new Poslasticar;
-	
+		
 		ps.pomocnik = pe;
-		ps.pomocnik.p = new char[4];
-		
-		r1.postaviIme("Zoran");  // ime = Zoran
-		
+		//pe.postaviIme("a");
+		ps.pomocnik.postaviIme("a"); // ime = Pekar Ceca
+		//print(ps.pomocnik.godinaRodjenja);
 	}
 }
 //izlazi : Zoran

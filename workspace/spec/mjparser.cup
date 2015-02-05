@@ -464,7 +464,9 @@ ConstVar ::= IDENT:varName
 	}
 	else {
 		if (var_type==Tab.find("string").getType()) {
-			Tab.insert(Obj.Var, varName+"__$#_", var_type);
+			Obj o = Tab.insert(Obj.Var, varName+"__$#_", var_type);
+			o.setAdr(Code.dataSize);
+			Code.dataSize++;
 			hiddenVarsCount++;
 		}
 		Obj obj = Tab.insert(Obj.Con, varName, var_type);
@@ -726,8 +728,8 @@ ClassDecl ::= CLASS IDENT:name Ext:ext LBRACE {:
 					 Tab.chainLocalSymbols(currentClass.getType());
 					 int numOfFields = currentClass.getType().getNumberOfFields();
 					 Collection<Obj> locals = Tab.currentScope().getLocals().symbols();
-					 int vftStart = getMethodTableSize();
-					 currentClass.setAdr(vftStart+Code.dataSize);
+					 //int vftStart = getMethodTableSize();
+					 currentClass.setAdr(Code.dataSize);
 					 for (Obj obj: locals) {
 						 if (obj.getKind()==Obj.Meth) {
 							// Generate method entry.
@@ -857,13 +859,14 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 	//currentMethod.setFpPos(currentMethodParams);
 	if (isMain) {
 		Code.mainPc = Code.pc;
-		MethodTable.clear();
+		
 		for (Byte b : codeBuff.getBuff()) {
 			Code.buf[Code.pc++] = b;
 		}
 		for (byte b: MethodTable) {
 			Code.buf[Code.pc++] = b;
 		}
+		MethodTable.clear();
 	}
 	Code.put(Code.enter);
 	Code.put(currentMethod.getLevel());
@@ -996,11 +999,12 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		/*if (dest.getType().getKind()==Struct.Array && !designatorIsArrElem) {
 			parser.report_error(parser.getTypeName(dest.getType()), destleft, "designator mora biti promenljiva, element niza ili polje unutar objekta");
 		}*/
+	
+	Obj tmp = null;
+	boolean b = false;
 	if (!g) {
 		Code.store(dest);
 	}
-	Obj tmp = null;
-	boolean b = false;
 	if (designatorInExpr) {
 		tmp = designatorStack.pop();
 		//designatorInExpr = false;
@@ -1030,6 +1034,7 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		Code.put(Code.putfield);
 		Code.put2(0);
 	}
+	
 :}
 				|
 			Designator:dest DesignatorsFollowUp SEMI
@@ -1067,9 +1072,12 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		parser.funcCallsInMain++;
 	}
 	int destAdr = func.getAdr() - Code.pc;
+
 	if (classMethodCall) {
 		classMethodCall = false;
+		
 		Code.load(prevDesignator);
+
 		Code.put(Code.getfield);
 		Code.put2(0);
 		Code.put(Code.invokevirtual);
@@ -2157,11 +2165,13 @@ IdentRef ::= DOT IDENT:ident
 						previosDesignator = currentDesignator;
 						currentDesignator = obj;
 						//if (designatorInExpr) {
-							Obj t  = prevDesignator = designatorStack.pop();
-							if (t.getType()==Tab.find("string").getType() && t.getKind()==Obj.Con) {
-								t = Tab.find(ident+"__$#_");
+							if (obj.getKind()!=Obj.Meth) {
+								Obj t  = prevDesignator = designatorStack.pop();
+								if (t.getType()==Tab.find("string").getType() && t.getKind()==Obj.Con) {
+									t = Tab.find(ident+"__$#_");
+								}
+								Code.load(t);
 							}
-							Code.load(t);
 							//resetDesignatorInExprCond();
 						//}
 						designatorStack.push(obj);
@@ -2171,7 +2181,6 @@ IdentRef ::= DOT IDENT:ident
 						RESULT = obj;
 						if (obj.getKind() == Obj.Meth) {
 							classMethodCall = true;
-							//Code.load(prevDesignator);
 						}
 						curr_ident = obj;
 						designatorIsArrElem = false;
