@@ -12,6 +12,8 @@ import java.util.Stack;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
+import java.util.Queue;
+import java.util.LinkedList;
 
 
 parser code {:
@@ -192,7 +194,7 @@ action code {:
 	Stack<Stack<Integer>> controlStacksT = new Stack<Stack<Integer>>();
 	Stack<Stack<Integer>> controlStacksF = new Stack<Stack<Integer>>();
 	Stack<Stack<Integer>> controlStacksB = new Stack<Stack<Integer>>();
-	Stack<Obj> referenceStack = new Stack<Obj>();
+	Queue<Obj> referenceStack = new LinkedList<Obj>();
 	HashMap<Obj, Obj> var2Type = new HashMap<Obj, Obj>();
 	Stack<Integer> breakJumps = new Stack<Integer>();
 	int hiddenVarsCount = 0;
@@ -690,7 +692,8 @@ ClassDecl ::= CLASS IDENT:name Ext:ext LBRACE {:
 						for (Obj obj:membersInSuperclass) {
 							if (obj.getKind()==Obj.Fld) {//polja
 								Obj o = Tab.insert(obj.getKind(), obj.getName(), obj.getType());
-								o.setAdr(Tab.currentScope().getnVars());
+								//o.setAdr(Tab.currentScope().getnVars());
+								o.setAdr(obj.getAdr());
 							}
 							else if (obj.getKind() == Obj.Meth){//metode
 								Obj o = Tab.insert(obj.getKind(), obj.getName(), obj.getType());
@@ -1002,36 +1005,39 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		}*/
 	
 	Obj tmp = null;
-	boolean b = false;
+	//boolean b = false;
 	if (!g) {
 		Code.store(dest);
 	}
 	if (designatorInExpr) {
 		tmp = designatorStack.pop();
 		//designatorInExpr = false;
-		b = true;
+		//b = true;
 		resetDesignatorInExprCond();
 	}
 	//designatorStack.pop();
 	if (newClassFactor) {
 
 		newClassFactor = false;
-		if (dest.getKind()==Obj.Fld) {
-			Code.load(prevDesignator);
+		//if (dest.getKind()==Obj.Fld) {
+			//Code.load(prevDesignator);
+		//}
+		while (!referenceStack.isEmpty()) {
+			Code.load(referenceStack.remove());
 		}
 		Code.load(dest);
 		Code.put(Code.const_);
-		if (b) {
+		/*if (b) {
 			var2Type.remove(dest);
 			Obj o = var2Type.get(tmp);
 			var2Type.put(dest, o);
 			Code.put4(o.getAdr());
 		}
-		else {
-			var2Type.remove(dest);
-			var2Type.put(dest, typeNode);
+		else {*/
+			//var2Type.remove(dest);
+			//var2Type.put(dest, typeNode);
 			Code.put4(typeNode.getAdr());
-		}
+		//}
 		Code.put(Code.putfield);
 		Code.put2(0);
 	}
@@ -1076,8 +1082,8 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 
 	if (classMethodCall) {
 		classMethodCall = false;
-		while (!referenceStack.empty()) {
-			Code.load(referenceStack.pop());
+		while (!referenceStack.isEmpty()) {
+			Code.load(referenceStack.remove());
 		}
 		Code.put(Code.getfield);
 		Code.put2(0);
@@ -1869,8 +1875,8 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 	int destAdr = func.getAdr() - Code.pc;
 	if (classMethodCall) {
 		classMethodCall = false;
-		while (!referenceStack.empty()) {
-			Code.load(referenceStack.pop());
+		while (!referenceStack.isEmpty()) {
+			Code.load(referenceStack.remove());
 		}
 		Code.put(Code.getfield);
 		Code.put2(0);
@@ -2084,7 +2090,7 @@ Unmatched ::= IfLexem LPAREN Condition RPAREN Statement {:
 Designator ::= IDENT:name
 {:	
 	previosDesignator = currentDesignator;
-	referenceStack = new Stack<Obj>();
+	referenceStack = new LinkedList<Obj>();
 	Obj obj = currentDesignator = Tab.find(name);
 	/*if (obj.getType()==Tab.find("string").getType() && obj.getKind()==Obj.Con) {
 		obj = currentDesignator = Tab.find(name+"__$#_");
@@ -2098,9 +2104,9 @@ Designator ::= IDENT:name
 	RESULT = obj;
 	curr_ident = obj;
 	designatorIsArrElem = false;
-	if (obj.getType().getKind()==Struct.Array && obj.getType() != Tab.find("string").getType()) {
-		Code.load(curr_ident);
-	}
+	//if (obj.getType().getKind()==Struct.Array && obj.getType() != Tab.find("string").getType()) {
+		//Code.load(curr_ident);
+	//}
 
 :} IdentList:il {:
 	if (il != Tab.noObj) {
@@ -2109,7 +2115,13 @@ Designator ::= IDENT:name
 :}
 ;
 
-IdentList ::= IdentList:il IdentRef:ir 
+IdentList ::= IdentList:il
+{:
+	if (il.getType().getKind()==Struct.Array && il.getType() != Tab.find("string").getType()) {
+		Code.load(il);
+	}
+:}
+ IdentRef:ir 
 {: 
 	if (ir != null)
 		RESULT = ir;
@@ -2138,16 +2150,15 @@ IdentRef ::= DOT IDENT:ident
    					}
    					if (curr_ident.getName().equals("this") && classDef) {
    						//TODO, napravi funckiju za proveravanje da li je trazeni simbol u local scopu
-   						/*obj = Tab.noObj;
-   						Collection<Obj> col = Tab.currentScope().getLocals().symbols();
+   						obj = Tab.noObj;
+   						Collection<Obj> col = Tab.currentScope().getOuter().getLocals().symbols();
    						for (Obj c: col) {
    							if (c.getName().equals(ident)) {
    								pronasao = true;
    								obj = c;
    								break;
    							}
-   						}*/
-						obj = Tab.find(ident);
+   						}
 						/*if (obj.getType()==Tab.find("string").getType() && obj.getKind()==Obj.Con) {
 								obj = Tab.find(name+"__$#_");
 						}*/
@@ -2169,12 +2180,12 @@ IdentRef ::= DOT IDENT:ident
 						currentDesignator = obj;
 						//if (designatorInExpr) {
 							//if (obj.getKind()!=Obj.Meth) {
-								Obj t  = prevDesignator = designatorStack.peek();
+								Obj t  = prevDesignator = designatorStack.pop();
 								if (t.getType()==Tab.find("string").getType() && t.getKind()==Obj.Con) {
 									t = Tab.find(ident+"__$#_");
 								}
 								Code.load(t);
-								referenceStack.push(t);
+								referenceStack.add(t);
 							//}
 							//resetDesignatorInExprCond();
 						//}
@@ -2188,13 +2199,15 @@ IdentRef ::= DOT IDENT:ident
 							//Code.load();
 						}
 						curr_ident = obj;
+
+
 						designatorIsArrElem = false;
 						if (obj.getType().getKind()==Struct.Class) {
-							newClassFactor = true;
+							//newClassFactor = true;
 							//Code.load(obj);
 						}
 						else {
-							newClassFactor = false;
+							//newClassFactor = false;
 						}
 
 					}
