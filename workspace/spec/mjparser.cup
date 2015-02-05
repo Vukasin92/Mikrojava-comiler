@@ -192,6 +192,7 @@ action code {:
 	Stack<Stack<Integer>> controlStacksT = new Stack<Stack<Integer>>();
 	Stack<Stack<Integer>> controlStacksF = new Stack<Stack<Integer>>();
 	Stack<Stack<Integer>> controlStacksB = new Stack<Stack<Integer>>();
+	Stack<Obj> referenceStack = new Stack<Obj>();
 	HashMap<Obj, Obj> var2Type = new HashMap<Obj, Obj>();
 	Stack<Integer> breakJumps = new Stack<Integer>();
 	int hiddenVarsCount = 0;
@@ -1075,9 +1076,9 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 
 	if (classMethodCall) {
 		classMethodCall = false;
-		
-		Code.load(prevDesignator);
-
+		while (!referenceStack.empty()) {
+			Code.load(referenceStack.pop());
+		}
 		Code.put(Code.getfield);
 		Code.put2(0);
 		Code.put(Code.invokevirtual);
@@ -1868,7 +1869,9 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 	int destAdr = func.getAdr() - Code.pc;
 	if (classMethodCall) {
 		classMethodCall = false;
-		Code.load(prevDesignator);
+		while (!referenceStack.empty()) {
+			Code.load(referenceStack.pop());
+		}
 		Code.put(Code.getfield);
 		Code.put2(0);
 		Code.put(Code.invokevirtual);
@@ -2081,7 +2084,7 @@ Unmatched ::= IfLexem LPAREN Condition RPAREN Statement {:
 Designator ::= IDENT:name
 {:	
 	previosDesignator = currentDesignator;
-
+	referenceStack = new Stack<Obj>();
 	Obj obj = currentDesignator = Tab.find(name);
 	/*if (obj.getType()==Tab.find("string").getType() && obj.getKind()==Obj.Con) {
 		obj = currentDesignator = Tab.find(name+"__$#_");
@@ -2165,13 +2168,14 @@ IdentRef ::= DOT IDENT:ident
 						previosDesignator = currentDesignator;
 						currentDesignator = obj;
 						//if (designatorInExpr) {
-							if (obj.getKind()!=Obj.Meth) {
-								Obj t  = prevDesignator = designatorStack.pop();
+							//if (obj.getKind()!=Obj.Meth) {
+								Obj t  = prevDesignator = designatorStack.peek();
 								if (t.getType()==Tab.find("string").getType() && t.getKind()==Obj.Con) {
 									t = Tab.find(ident+"__$#_");
 								}
 								Code.load(t);
-							}
+								referenceStack.push(t);
+							//}
 							//resetDesignatorInExprCond();
 						//}
 						designatorStack.push(obj);
@@ -2181,6 +2185,7 @@ IdentRef ::= DOT IDENT:ident
 						RESULT = obj;
 						if (obj.getKind() == Obj.Meth) {
 							classMethodCall = true;
+							//Code.load();
 						}
 						curr_ident = obj;
 						designatorIsArrElem = false;
