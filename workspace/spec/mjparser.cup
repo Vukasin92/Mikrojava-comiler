@@ -184,6 +184,7 @@ action code {:
 	int currentMethodParams = 0;
 	boolean lockFunctionDesignator = false;
 	Obj previosDesignator = null;
+	boolean ucitaoThis = false;
 	Obj currentClass = null;
 	boolean designatorInExpr = false;
 	Stack<Obj> designatorStack = new Stack<Obj>();
@@ -1151,7 +1152,17 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 				{:
 					returnFound = true;
 					Struct currMethType = currentMethod.getType();
-					if (!currMethType.compatibleWith(t)) {
+					boolean substitution = false;
+					Obj temp = currentMethod;
+					Struct eTemp = t;
+					while (eTemp.getKind()==Struct.Class) {
+						if (eTemp.getElemType() == currMethType) {
+							substitution = true;
+							break;
+						}
+						eTemp = eTemp.getElemType();
+					}
+					if (!currMethType.compatibleWith(t) && !substitution) {
 						parser.report_error("Semanticka greska na liniji "+tleft+": tip izraza u return naredbi se ne slaze sa tipom povratne vrednosti funkcije "+currentMethod.getName(),null);
 					}
 					if (isVoid) {
@@ -1495,10 +1506,20 @@ ActPar ::= Expr:e {:
 			}
 		}
 	}
+
+	boolean substitution = false;
+	Struct eTemp = e;
+	while (eTemp.getKind()==Struct.Class) {
+		if (eTemp.getElemType() == obj.getType()) {
+			substitution = true;
+			break;
+		}
+	eTemp = eTemp.getElemType();
+	}
 	if (numOfActPars >= numOfFormPars) {
 		parser.report_error("Greska na liniji "+eleft+" vise stvarnih od formalnih parametara", null);
 	}
-	else if (!e.assignableTo(obj.getType())) {
+	else if (!e.assignableTo(obj.getType()) && !substitution) {
 	    parser.report_error(obj.getName(), eleft, "nekompatibilni tipovi stvarnih sa formalnim parametrima");
 	}
 	else {
@@ -1932,9 +1953,9 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 		Code.put2(0);
 		Code.put(Code.invokevirtual);
 		for (char c:func.getName().toCharArray()) {
-			Code.put(c);
+			Code.put4(c);
 		}
-		Code.loadConst(-1);
+		Code.put4(-1);
 	}
 	else {
 		Code.put(Code.call);
@@ -1949,15 +1970,15 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 :}
 			|
 		   Designator:d {: RESULT = d.getType();
+		   		//while (!referenceStack.isEmpty()) {
+					//Code.load(referenceStack.remove());
+				//}
 		     if (d.getType()==Tab.find("string").getType() && d.getKind()==Obj.Con) 
 		     	Code.load(Tab.find(d.getName()+"__$#_"));
 		     else 
 		     	Code.load(d); //designatorInExpr = true;
 		   	setDesignatorInExprCond();
 		   	designatorInExpr = true;
-		   //	while (!referenceStack.isEmpty()) {
-				//Code.load(referenceStack.remove());
-			//}
 			/*while (referenceStackCount>0) {
 				Code.load(referenceStack.remove());
 				referenceStackCount--;
@@ -2151,7 +2172,10 @@ Designator ::= IDENT:name
 	/*while (!referenceStack.isEmpty()) {
 		Code.load(referenceStack.remove());
 	}*/
-	
+	ucitaoThis = false;
+	if (name.equals("this")) {
+		ucitaoThis = true;
+	}
 	referenceStacksStack.push(referenceStack);
 	referenceStack = new LinkedList<Obj>();
 	//referenceStackCount = 0;
@@ -2168,6 +2192,11 @@ Designator ::= IDENT:name
 	RESULT = obj;
 	curr_ident = obj;
 	designatorIsArrElem = false;
+	if (currentDesignator.getKind()==Obj.Fld && !name.equals("this")) {
+			Obj tmpObj = Tab.find("this");
+			Code.load(tmpObj);
+			referenceStack.add(tmpObj);
+	}
 	//if (obj.getType().getKind()==Struct.Array && obj.getType() != Tab.find("string").getType()) {
 		//Code.load(curr_ident);
 	//}
@@ -2176,6 +2205,12 @@ Designator ::= IDENT:name
 	if (il != Tab.noObj) {
 		RESULT = il;
 	}
+	else {
+		//if (currentDesignator.getKind()==Obj.Fld) {
+		//	Code.put(Code.load_n);
+		//}
+	}
+	
 :}
 ;
 
@@ -2249,6 +2284,10 @@ IdentRef ::= DOT IDENT:ident
 								if (t.getType()==Tab.find("string").getType() && t.getKind()==Obj.Con) {
 									t = Tab.find(ident+"__$#_");
 								}
+								//if (!ucitaoThis) {
+								//	ucitaoThis = true;
+								//	Code.put(Code.load_n);
+								//}
 								Code.load(t);
 								referenceStack.add(t);
 								//referenceStackCount++;
