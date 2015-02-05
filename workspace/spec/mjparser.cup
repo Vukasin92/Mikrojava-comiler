@@ -338,10 +338,24 @@ init with {:
 		Code.put(Code.exit);
 		Code.put(Code.return_);
 	}
-	o = Tab.find("chr");
+	o = Tab.find("ch");
 	o.setLevel(1);
+	{
+		Code.put(Code.enter);
+		Code.put(1);
+		Code.put(1);
+		Code.put(Code.exit);
+		Code.put(Code.return_);
+	}
 	o = Tab.find("ord");
 	o.setLevel(1);
+	{
+		Code.put(Code.enter);
+		Code.put(1);
+		Code.put(1);
+		Code.put(Code.exit);
+		Code.put(Code.return_);
+	}
 :}
 
 scan with {:
@@ -480,7 +494,7 @@ ConstVar ::= IDENT:varName
 {:
 	
 	Obj temp = Tab.find(varName);
-	if (temp.getLevel() == currentLevel) {
+	if (temp.getLevel() == currentLevel && temp!=Tab.noObj) {
 		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
 		RESULT = Tab.noObj;
 	}
@@ -626,7 +640,7 @@ VarList ::= VarList COMMA Var
 Var ::= IDENT:varName
 {:
 	Obj temp = Tab.find(varName);
-	if (temp.getLevel() == currentLevel) {
+	if (temp.getLevel() == currentLevel && temp!=Tab.noObj) {
 		parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
 	}
 	else {
@@ -655,7 +669,7 @@ Var ::= IDENT:varName
 				parser.globalArrayCount++;
 
 			Obj temp = Tab.find(varName);
-			if (temp.getLevel() == currentLevel) {
+			if (temp.getLevel() == currentLevel && temp!=Tab.noObj) {
 				parser.report_error("Semanticka greska na liniji "+varNameleft+": redefinicija promenljive "+varName, null);
 			}
 			else {
@@ -966,7 +980,7 @@ FormPars  ::=  FormPars COMMA Parameter
 Parameter  ::=  Type IDENT:varName
 {:
 	Obj temp = Tab.find(varName);
-	if (temp.getLevel() == currentLevel) {
+	if (temp.getLevel() == currentLevel && temp != Tab.noObj) {
 		parser.report_error(varName, varNameleft, "duplikat imena u formalnim parametrima funkcije");
 	}
 	else {

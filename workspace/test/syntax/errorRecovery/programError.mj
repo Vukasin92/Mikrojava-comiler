@@ -1,92 +1,116 @@
-program klase
+program test303 
 
-	class Tacka {
-		int x, y;
+	class Radnik{
+		string ime;
+		int godinaRodjenja;
+		char p[];
 		{
-			int getX() {
-				return x;
+			void postaviIme(string ime){
+				this.ime = ime;
 			}
-			int getY() {
-				return y;
-			}
-			void set(int x, int y) {
-				this.x = x;
-				this.y = y;
-			}
-			void stampaj() {
-				print('(');
-				print(x);
-				print(',');
-				print(y);
-				print(')');
+			
+			void stampajGodinu(){
+				print(this.godinaRodjenja);
+				print(eol);
+			}		
+		}
+	}
+	
+	class Pekar extends Radnik{
+		char z[];
+		{
+			void postaviIme(string ime){
+				this.ime = "Pekar " + ime;
 			}
 		}
 	}
-	class Krug {
-		int r;
-		Tacka t;
+	
+	class Poslasticar extends Pekar{
+		Radnik pomocnik;
 		{
-			void set(int r, Tacka t) {
-				this.r = r;
-				this.t = new Tacka;
-				this.t.set(t.getX(), t.getY());
-			}
-			int getR() {
-				return r;
-			}
-			Tacka getT() {
-				return t;
-			}
-			void stampaj() {
-				print("K[r=");
-				print(r);
-				print(",t=");
-				t.stampaj();
-				print(']');
+			void postaviIme(string ime){
+				this.ime = "Poslasticar " + ime;
 			}
 		}
 	}
-	Tacka t1, t2, t3, t4;
-	Krug k1, k2;
-	{
-		int rastojanjena2(Tacka t1, Tacka t2) {
-				return (t2.x-t1.x)*(t2.x-t1.x) + (t2.y-t1.y)*(t2.y-t1.y);
-		}
-		void stampajsve(string zaglavlje) {
-			print(zaglavlje); print(eol);
-			print("T1: "); t1.stampaj(); print(eol);
-			print("T2: "); t2.stampaj(); print(eol);
-			print("T3: "); t3.stampaj(); print(eol);
-			print("T4: "); t4.stampaj(); print(eol);
-			print("K1: "); k1.stampaj(); print(eol);
-			print("K2: "); k2.stampaj(); print(eol);
-		}
-		void main() {
-			t1 = new Tacka;
-			t2 = new Tacka;
-			t3 = new Tacka;
-			t4 = new Tacka;
-			k1 = new Krug;
-			k2 = new Krug;
-			t1.set(5,6);
-			k1.set(2,t1);
-			t2.set(777777,666666);
-			k2.set(2322222,t2);
-			t2.set(555,333);
-			t3.set(20,10);
-			t4.set(50,-20);
-			print(rastojanjena2(t4,t3));
-			print(eol);
-			stampajsve("sve na kraju");
-		}
-		//izlaz:
-		//1800
-		//sve na kraju
-		//T1: (5,6)
-		//T2: (555,333)
-		//T3: (20,10)
-		//T4: (50,-20)
-		//K1: K[r=2,t=(5,6)]
-		//K2: K[r=2322222,t=(777777,666666)]
+	
+	const string izlaz = "Unesite ceo broj\n";
+	int i;
+	
+{
+	string uporedi(string a, string b){
+		if (a == b) 
+			return "isti";
+		return "razliciti";
+	}
+	
+	void stampaj(string s){
+		print(s);
+		print(eol);
+	}
 
+	void main() Radnik r1, r2, r3; Pekar pe; Poslasticar ps;{
+		r1 = new Radnik;  
+		r2 = new Pekar;
+		r3 = new Poslasticar;
+		pe = new Pekar;
+		ps = new Poslasticar;
+	
+		ps.pomocnik = pe;
+		ps.pomocnik.p = new char[4];
+		
+		r1.postaviIme("Zoran");  // ime = Zoran
+		r2.postaviIme("Goran");  // ime = Pekar Goran
+		r3.postaviIme("Goran");  // ime = Poslasticar Goran
+		pe.postaviIme("Bojan");  // ime = Pekar Bojan
+		ps.postaviIme("Mira");   // ime = Poslasticar Mira
+		ps.pomocnik.postaviIme("Ceca"); // ime = Pekar Ceca
+		ps.pomocnik.p[0] = 'r';
+		ps.pomocnik.p[1] = 'a';
+		ps.pomocnik.p[2] = 'd';
+		ps.pomocnik.p[3] = 'i';
+		
+		stampaj(r1.ime);    //izlaz Zoran
+		stampaj(r2.ime);    //izlaz Pekar Goran
+		stampaj(r3.ime);    //izlaz Poslasticar Goran
+		stampaj(ps.pomocnik.ime); // izlaz Pekar Ceca
+		
+		print(uporedi(r2.ime, r3.ime));  // izlaz razliciti
+		print(eol);
+		
+		i = 0;
+		while(i < len(ps.pomocnik.p)){
+			print(ps.pomocnik.p[i]);
+			i++;
+		}
+		print(eol);
+		
+		print(izlaz);
+		read(r1.godinaRodjenja);  //uneti broj
+		if (r1.godinaRodjenja > 0)
+			stampaj(pe.ime);     //Pekar Bojan
+		else
+			stampaj(ps.ime);     // Poslasticar Mira
+			
+		r2.godinaRodjenja = 1970;
+		r2.stampajGodinu();
+		
+		ps.pomocnik.godinaRodjenja = 1980;
+		ps.pomocnik.stampajGodinu();
 	}
+}
+//izlazi : Zoran
+	//	   Pekar Goran
+	//	   Poslasticar Goran
+	//	   Pekar Ceca
+	//	   razliciti
+	//	   radi
+	
+// ako je unet pozitivan broj:
+    //    Pekar Bojan
+// inace:
+    //    Poslasticar Mira
+//dalje:
+    //     1970
+	//     1980
+	
