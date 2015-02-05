@@ -1,116 +1,77 @@
-program test303 
+//Test 302
 
-	class Radnik{
-		string ime;
-		int godinaRodjenja;
-		char p[];
-		{
-			void postaviIme(string ime){
-				this.ime = ime;
-			}
-			
-			void stampajGodinu(){
-				print(this.godinaRodjenja);
-				print(eol);
-			}		
-		}
-	}
-	
-	class Pekar extends Radnik{
-		char z[];
-		{
-			void postaviIme(string ime){
-				this.ime = "Pekar " + ime;
-			}
-		}
-	}
-	
-	class Poslasticar extends Pekar{
-		Radnik pomocnik;
-		{
-			void postaviIme(string ime){
-				this.ime = "Poslasticar " + ime;
-			}
-		}
-	}
-	
-	const string izlaz = "Unesite ceo broj\n";
-	int i;
-	
+program test302
+
+const string str1 = "prvi";
+string str2;
+string ulaz;
+
+int i;
+bool ijedva;
+
+int niz[];
 {
-	string uporedi(string a, string b){
-		if (a == b) 
-			return "isti";
-		return "razliciti";
+	
+	int sum(int z, int d){
+		return z + d;
 	}
 	
-	void stampaj(string s){
-		print(s);
-		print(eol);
+	int inkrement(int a) int pom; {
+		pom = 1;
+		return sum(a,pom);
 	}
+	
+	void main(){
 
-	void main() Radnik r1, r2, r3; Pekar pe; Poslasticar ps;{
-		r1 = new Radnik;  
-		r2 = new Pekar;
-		r3 = new Poslasticar;
-		pe = new Pekar;
-		ps = new Poslasticar;
-	
-		ps.pomocnik = pe;
-		ps.pomocnik.p = new char[4];
-		
-		r1.postaviIme("Zoran");  // ime = Zoran
-		r2.postaviIme("Goran");  // ime = Pekar Goran
-		r3.postaviIme("Goran");  // ime = Poslasticar Goran
-		pe.postaviIme("Bojan");  // ime = Pekar Bojan
-		ps.postaviIme("Mira");   // ime = Poslasticar Mira
-		ps.pomocnik.postaviIme("Ceca"); // ime = Pekar Ceca
-		ps.pomocnik.p[0] = 'r';
-		ps.pomocnik.p[1] = 'a';
-		ps.pomocnik.p[2] = 'd';
-		ps.pomocnik.p[3] = 'i';
-		
-		stampaj(r1.ime);    //izlaz Zoran
-		stampaj(r2.ime);    //izlaz Pekar Goran
-		stampaj(r3.ime);    //izlaz Poslasticar Goran
-		stampaj(ps.pomocnik.ime); // izlaz Pekar Ceca
-		
-		print(uporedi(r2.ime, r3.ime));  // izlaz razliciti
-		print(eol);
-		
-		i = 0;
-		while(i < len(ps.pomocnik.p)){
-			print(ps.pomocnik.p[i]);
+			//provera da li valja IF
+		if(1!=1) print(-6);
+		else print(0);
+
+			//while i if izrazi
+		i = 0; ijedva = false;
+		while(i < 5){
 			i++;
+			if(i == 2) ijedva = true;
 		}
-		print(eol);
+		if(ijedva)
+			if(i == 5) print(1);
+			else print(-1);
 		
-		print(izlaz);
-		read(r1.godinaRodjenja);  //uneti broj
-		if (r1.godinaRodjenja > 0)
-			stampaj(pe.ime);     //Pekar Bojan
-		else
-			stampaj(ps.ime);     // Poslasticar Mira
-			
-		r2.godinaRodjenja = 1970;
-		r2.stampajGodinu();
+			//konkatenacija i poredjenje stringova
+		str2 = "drugi";
+		str2 = str2 + str1;
+		if(str2 == "drugiprvi") print(2);
+		else print(-2);
 		
-		ps.pomocnik.godinaRodjenja = 1980;
-		ps.pomocnik.stampajGodinu();
+			//poziv globalnih funkcija
+		niz = new int[3];
+		niz[0] = 1;
+		niz[1] = 2;
+		niz[2] = sum(niz[1], niz[0])  + 1;
+		if(niz[2] == 4) print(3);
+		else print(-3);
+		
+			//break u while-u, funkcija poziva funkciju
+		i = 0;
+		while(i < 10){			
+			if(i == 3) break;
+			i = inkrement(i);
+		}
+		if(i == 3) print(4);
+		else print(-4);
+		
+			//citanje string i konkatenacija
+		read(ulaz);
+		ulaz = "glava_" + ulaz;
+		ulaz = ulaz + "_rep";
+		print(ulaz);		
 	}
 }
-//izlazi : Zoran
-	//	   Pekar Goran
-	//	   Poslasticar Goran
-	//	   Pekar Ceca
-	//	   razliciti
-	//	   radi
-	
-// ako je unet pozitivan broj:
-    //    Pekar Bojan
-// inace:
-    //    Poslasticar Mira
-//dalje:
-    //     1970
-	//     1980
-	
+
+//	Izlazi: 
+//	0
+//	1
+//	2
+//	3
+//	4
+// "glava_" + "ulaz" + "_rep";

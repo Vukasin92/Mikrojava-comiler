@@ -197,6 +197,7 @@ action code {:
 	Queue<Obj> referenceStack = new LinkedList<Obj>();
 	HashMap<Obj, Obj> var2Type = new HashMap<Obj, Obj>();
 	Stack<Integer> breakJumps = new Stack<Integer>();
+	boolean loadedArrAdr = false;
 	int hiddenVarsCount = 0;
 	boolean newClassFactor = false;
 	boolean classMethodCall = false;
@@ -322,11 +323,22 @@ init with {:
     Struct stringType = new Struct(Struct.Array, Tab.charType);
     Tab.insert(Obj.Type, "string", stringType);
 	Obj o = Tab.find("len");
-	o.setFpPos(1);
+	o.setLevel(1);
+	o.setAdr(Code.pc);
+	{
+		//code generation for len
+		Code.put(Code.enter);
+		Code.put(1);
+		Code.put(1);
+		Code.put(Code.load_n);
+		Code.put(Code.arraylength);
+		Code.put(Code.exit);
+		Code.put(Code.return_);
+	}
 	o = Tab.find("chr");
-	o.setFpPos(1);
+	o.setLevel(1);
 	o = Tab.find("ord");
-	o.setFpPos(1);
+	o.setLevel(1);
 :}
 
 scan with {:
@@ -417,10 +429,12 @@ ConstPart ::= ConstVar:dest EQUAL Rhs:e
 		g = true; parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e.getType())+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType()),null);
 	}
 	if (!g) {
+		
 		if (dest.getType() == Tab.find("string").getType()) {
 			codeBuff.store(dest);
 		}
-		dest.setAdr(e.getAdr());
+		if (var_type!=Tab.find("string").getType())
+			dest.setAdr(e.getAdr());
 	}
 		
 :}
@@ -446,10 +460,12 @@ ConstPart ::= ConstVar:dest EQUAL Rhs:e
 		g = false; parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e.getType())+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType().getElemType()),null);
 	}
 	if (!g) {
+		
 		if (dest.getType() == Tab.find("string").getType()) {
 			codeBuff.store(dest);
 		}
-		dest.setAdr(e.getAdr());
+		if (var_type!=Tab.find("string").getType())
+			dest.setAdr(e.getAdr());
 	}
 :}
 
@@ -466,16 +482,17 @@ ConstVar ::= IDENT:varName
 		RESULT = Tab.noObj;
 	}
 	else {
-		if (var_type==Tab.find("string").getType()) {
-			Obj o = Tab.insert(Obj.Var, varName+"__$#_", var_type);
-			o.setAdr(Code.dataSize);
-			Code.dataSize++;
-			hiddenVarsCount++;
-		}
+		Obj o=null;
+
 		Obj obj = Tab.insert(Obj.Con, varName, var_type);
 		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
 		RESULT = obj;
-		//Code.load(obj);
+		if (var_type==Tab.find("string").getType()) {
+			o = Tab.insert(Obj.Var, varName+"__$#_", var_type);
+			o.setAdr(Code.dataSize++);
+			hiddenVarsCount++;
+			RESULT = o;
+		}
 	}
 	
 :}
@@ -642,8 +659,15 @@ Var ::= IDENT:varName
 				if (classDef) {
 					Tab.insert(Obj.Fld, varName, new Struct(Struct.Array, var_type));
 				}
-				else
-					Tab.insert(Obj.Var, varName, new Struct(Struct.Array, var_type));
+				else {
+					Obj o = Tab.insert(Obj.Var, varName, new Struct(Struct.Array, var_type));
+					if (currentLevel==0) {
+						o.setAdr(Code.dataSize++);
+					}
+					else {
+						
+					}
+				}
 				parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
 			}
 :}
@@ -2119,10 +2143,11 @@ IdentList ::= IdentList:il
 {:
 	if (il.getType().getKind()==Struct.Array && il.getType() != Tab.find("string").getType()) {
 		Code.load(il);
+		loadedArrAdr = true;
 	}
 :}
  IdentRef:ir 
-{: 
+{: 	
 	if (ir != null)
 		RESULT = ir;
 	else
@@ -2217,7 +2242,11 @@ IdentRef ::= DOT IDENT:ident
 				}
 			:}
 			|
-			LSQUARE:dummy 
+			LSQUARE:dummy  {: if (!loadedArrAdr)
+									{
+										loadedArrAdr = false;
+										Code.load(curr_ident);
+									}:}
 				 Expr:e RSQUARE
 			{:
 				 // generisanje koda 
