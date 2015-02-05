@@ -195,6 +195,8 @@ action code {:
 	Stack<Stack<Integer>> controlStacksF = new Stack<Stack<Integer>>();
 	Stack<Stack<Integer>> controlStacksB = new Stack<Stack<Integer>>();
 	Queue<Obj> referenceStack = new LinkedList<Obj>();
+	Stack<Queue<Obj>> referenceStacksStack = new Stack<Queue<Obj>>();
+	int referenceStackCount = 0;
 	HashMap<Obj, Obj> var2Type = new HashMap<Obj, Obj>();
 	Stack<Integer> breakJumps = new Stack<Integer>();
 	boolean loadedArrAdr = false;
@@ -734,7 +736,7 @@ ClassDecl ::= CLASS IDENT:name Ext:ext LBRACE {:
 										Tab.insert(loc.getKind(), loc.getName(), loc.getType());
 									}
 								}
-								o.setFpPos(obj.getFpPos());
+								o.setFpPos(0);
 								o.setLevel(obj.getLevel());
 								Tab.chainLocalSymbols(o);
 								Tab.closeScope();
@@ -1049,6 +1051,11 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		while (!referenceStack.isEmpty()) {
 			Code.load(referenceStack.remove());
 		}
+		/*while (referenceStackCount>0) {
+			Code.load(referenceStack.remove());
+			referenceStackCount--;
+		}*/
+		referenceStack = referenceStacksStack.pop();
 		Code.load(dest);
 		Code.put(Code.const_);
 		/*if (b) {
@@ -1109,6 +1116,11 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		while (!referenceStack.isEmpty()) {
 			Code.load(referenceStack.remove());
 		}
+		/*while (referenceStackCount>0) {
+			Code.load(referenceStack.remove());
+			referenceStackCount--;
+		}*/
+		referenceStack = referenceStacksStack.pop();
 		Code.put(Code.getfield);
 		Code.put2(0);
 		Code.put(Code.invokevirtual);
@@ -1384,10 +1396,12 @@ OptNumbers ::= COMMA NUMBER
 ActParams ::= ActPars:dummy
 {:
 		//int numOfFormPars = functionDesignator.getFpPos();
-		int numOfFormPars = functionDesignator.getLevel();
+		Obj func = designatorStack.peek();
+		int numOfFormPars = func.getLevel();
 		if (numOfFormPars != numOfActPars) {
 			parser.report_error("Greska : netacan broj stvarnih parametara u pozivu funkcije u liniji "+dummyleft, null);
 		}
+		func.setFpPos(0);
 :}
 				|
 				/* epsilon */
@@ -1407,7 +1421,12 @@ ActParams ::= ActPars:dummy
 		}
 		else {
 			numOfFormPars = func.getLevel();//functionDesignator.getFpPos();
-			System.err.println("Greska? TODO");
+			Collection<Obj> col = func.getLocalSymbols();
+			for (Obj o: col) {
+				if (o.getName().equals("this")) {
+					containsThis = true;;
+				}
+			}
 		}
 		if (0 != numOfFormPars && !(containsThis && numOfFormPars==1)) {
 			parser.report_error("Greska : netacan broj stvarnih parametara u pozivu funkcije", null);
@@ -1439,6 +1458,7 @@ ActPar ::= Expr:e {:
 	
 	int numOfFormPars = functionDesignator.getLevel();//functionDesignator.getFpPos();
 	int i=0;
+	numOfActPars = functionDesignator.getFpPos();
 	boolean countedThis = false;
 	Collection<Obj> col = functionDesignator.getLocalSymbols();
 	for (Obj o: col) {
@@ -1485,6 +1505,7 @@ ActPar ::= Expr:e {:
     	parser.report_info(obj.getName(), eleft, obj);
 	}
 	numOfActPars++;
+	functionDesignator.setFpPos(numOfActPars);
 	if (designatorInExpr) {
 		designatorStack.pop();
 		//designatorInExpr = false;
@@ -1902,6 +1923,11 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 		while (!referenceStack.isEmpty()) {
 			Code.load(referenceStack.remove());
 		}
+		/*while (referenceStackCount>0) {
+			Code.load(referenceStack.remove());
+			referenceStackCount--;
+		}*/
+		referenceStack = referenceStacksStack.pop();
 		Code.put(Code.getfield);
 		Code.put2(0);
 		Code.put(Code.invokevirtual);
@@ -1929,6 +1955,14 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 		     	Code.load(d); //designatorInExpr = true;
 		   	setDesignatorInExprCond();
 		   	designatorInExpr = true;
+		   //	while (!referenceStack.isEmpty()) {
+				//Code.load(referenceStack.remove());
+			//}
+			/*while (referenceStackCount>0) {
+				Code.load(referenceStack.remove());
+				referenceStackCount--;
+			}*/
+			referenceStack = referenceStacksStack.pop();
 		   	 :}
 			|
 			NUMBER:i 
@@ -2114,7 +2148,13 @@ Unmatched ::= IfLexem LPAREN Condition RPAREN Statement {:
 Designator ::= IDENT:name
 {:	
 	previosDesignator = currentDesignator;
+	/*while (!referenceStack.isEmpty()) {
+		Code.load(referenceStack.remove());
+	}*/
+	
+	referenceStacksStack.push(referenceStack);
 	referenceStack = new LinkedList<Obj>();
+	//referenceStackCount = 0;
 	Obj obj = currentDesignator = Tab.find(name);
 	/*if (obj.getType()==Tab.find("string").getType() && obj.getKind()==Obj.Con) {
 		obj = currentDesignator = Tab.find(name+"__$#_");
@@ -2211,6 +2251,7 @@ IdentRef ::= DOT IDENT:ident
 								}
 								Code.load(t);
 								referenceStack.add(t);
+								//referenceStackCount++;
 							//}
 							//resetDesignatorInExprCond();
 						//}

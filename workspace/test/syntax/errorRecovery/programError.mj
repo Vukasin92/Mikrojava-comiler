@@ -1,77 +1,92 @@
-//Test 302
+program klase
 
-program test302
-
-const string str1 = "prvi";
-string str2;
-string ulaz;
-
-int i;
-bool ijedva;
-
-int niz[];
-{
-	
-	int sum(int z, int d){
-		return z + d;
-	}
-	
-	int inkrement(int a) int pom; {
-		pom = 1;
-		return sum(a,pom);
-	}
-	
-	void main(){
-
-			//provera da li valja IF
-		if(1!=1) print(-6);
-		else print(0);
-
-			//while i if izrazi
-		i = 0; ijedva = false;
-		while(i < 5){
-			i++;
-			if(i == 2) ijedva = true;
+	class Tacka {
+		int x, y;
+		{
+			int getX() {
+				return x;
+			}
+			int getY() {
+				return y;
+			}
+			void set(int x, int y) {
+				this.x = x;
+				this.y = y;
+			}
+			void stampaj() {
+				print('(');
+				print(x);
+				print(',');
+				print(y);
+				print(')');
+			}
 		}
-		if(ijedva)
-			if(i == 5) print(1);
-			else print(-1);
-		
-			//konkatenacija i poredjenje stringova
-		str2 = "drugi";
-		str2 = str2 + str1;
-		if(str2 == "drugiprvi") print(2);
-		else print(-2);
-		
-			//poziv globalnih funkcija
-		niz = new int[3];
-		niz[0] = 1;
-		niz[1] = 2;
-		niz[2] = sum(niz[1], niz[0])  + 1;
-		if(niz[2] == 4) print(3);
-		else print(-3);
-		
-			//break u while-u, funkcija poziva funkciju
-		i = 0;
-		while(i < 10){			
-			if(i == 3) break;
-			i = inkrement(i);
-		}
-		if(i == 3) print(4);
-		else print(-4);
-		
-			//citanje string i konkatenacija
-		read(ulaz);
-		ulaz = "glava_" + ulaz;
-		ulaz = ulaz + "_rep";
-		print(ulaz);		
 	}
-}
+	class Krug {
+		int r;
+		Tacka t;
+		{
+			void set(int r, Tacka t) {
+				this.r = r;
+				this.t = new Tacka;
+				this.t.set(t.getX(), t.getY());
+			}
+			int getR() {
+				return r;
+			}
+			Tacka getT() {
+				return t;
+			}
+			void stampaj() {
+				print("K[r=");
+				print(r);
+				print(",t=");
+				t.stampaj();
+				print(']');
+			}
+		}
+	}
+	Tacka t1, t2, t3, t4;
+	Krug k1, k2;
+	{
+		int rastojanjena2(Tacka t1, Tacka t2) {
+				return (t2.x-t1.x)*(t2.x-t1.x) + (t2.y-t1.y)*(t2.y-t1.y);
+		}
+		void stampajsve(string zaglavlje) {
+			print(zaglavlje); print(eol);
+			print("T1: "); t1.stampaj(); print(eol);
+			print("T2: "); t2.stampaj(); print(eol);
+			print("T3: "); t3.stampaj(); print(eol);
+			print("T4: "); t4.stampaj(); print(eol);
+			print("K1: "); k1.stampaj(); print(eol);
+			print("K2: "); k2.stampaj(); print(eol);
+		}
+		void main() {
+			t1 = new Tacka;
+			t2 = new Tacka;
+			t3 = new Tacka;
+			t4 = new Tacka;
+			k1 = new Krug;
+			k2 = new Krug;
+			t1.set(5,6);
+			k1.set(2,t1);
+			t2.set(777777,666666);
+			k2.set(2322222,t2);
+			t2.set(555,333);
+			t3.set(20,10);
+			t4.set(50,-20);
+			print(rastojanjena2(t4,t3));
+			print(eol);
+			stampajsve("sve na kraju");
+		}
+		//izlaz:
+		//1800
+		//sve na kraju
+		//T1: (5,6)
+		//T2: (555,333)
+		//T3: (20,10)
+		//T4: (50,-20)
+		//K1: K[r=2,t=(5,6)]
+		//K2: K[r=2322222,t=(777777,666666)]
 
-//	Izlazi: 
-//	0
-//	1
-//	2
-//	3
-//	4
-// "glava_" + "ulaz" + "_rep";
+	}
