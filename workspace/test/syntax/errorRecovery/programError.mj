@@ -60,43 +60,7 @@ program test303
 		ps.pomocnik.p = new char[4];
 		
 		r1.postaviIme("Zoran");  // ime = Zoran
-		r2.postaviIme("Goran");  // ime = Pekar Goran
-		r3.postaviIme("Goran");  // ime = Poslasticar Goran
-		pe.postaviIme("Bojan");  // ime = Pekar Bojan
-		ps.postaviIme("Mira");   // ime = Poslasticar Mira
-		ps.pomocnik.postaviIme("Ceca"); // ime = Pekar Ceca
-		ps.pomocnik.p[0] = 'r';
-		ps.pomocnik.p[1] = 'a';
-		ps.pomocnik.p[2] = 'd';
-		ps.pomocnik.p[3] = 'i';
 		
-		stampaj(r1.ime);    //izlaz Zoran
-		stampaj(r2.ime);    //izlaz Pekar Goran
-		stampaj(r3.ime);    //izlaz Poslasticar Goran
-		stampaj(ps.pomocnik.ime); // izlaz Pekar Ceca
-		
-		print(uporedi(r2.ime, r3.ime));  // izlaz razliciti
-		print(eol);
-		
-		i = 0;
-		while(i < len(ps.pomocnik.p)){
-			print(ps.pomocnik.p[i]);
-			i++;
-		}
-		print(eol);
-		
-		print(izlaz);
-		read(r1.godinaRodjenja);  //uneti broj
-		if (r1.godinaRodjenja > 0)
-			stampaj(pe.ime);     //Pekar Bojan
-		else
-			stampaj(ps.ime);     // Poslasticar Mira
-			
-		r2.godinaRodjenja = 1970;
-		r2.stampajGodinu();
-		
-		ps.pomocnik.godinaRodjenja = 1980;
-		ps.pomocnik.stampajGodinu();
 	}
 }
 //izlazi : Zoran

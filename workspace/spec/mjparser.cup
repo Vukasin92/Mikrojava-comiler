@@ -857,13 +857,13 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 	//currentMethod.setFpPos(currentMethodParams);
 	if (isMain) {
 		Code.mainPc = Code.pc;
+		MethodTable.clear();
 		for (Byte b : codeBuff.getBuff()) {
 			Code.buf[Code.pc++] = b;
 		}
 		for (byte b: MethodTable) {
 			Code.buf[Code.pc++] = b;
 		}
-		MethodTable.clear();
 	}
 	Code.put(Code.enter);
 	Code.put(currentMethod.getLevel());
