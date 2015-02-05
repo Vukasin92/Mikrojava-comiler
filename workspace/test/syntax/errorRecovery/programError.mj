@@ -1,61 +1,116 @@
-//nivo C
+program test303 
 
-program test08
-
-	class Alfa extends Nepostojeca {  //semanticka, osnovna klasa ne postoji
-		int x;
-		char x;
-		real y;                       //semanticka, tip ne postoji 
-		y z;                          //semanticka, isto
-		char b;
+	class Radnik{
+		string ime;
+		int godinaRodjenja;
+		char p[];
 		{
-			void k(){
-				this.b = 'a';
+			void postaviIme(string ime){
+				this.ime = ime;
 			}
 			
-			int f(int sss){        
-				this = 1;              //semanticka, ne poklapaju se tipovi
-				this.b = 1;            //semanticka, ne poklapaju se tipovi
-				this.zh = 2;           //semanticka, polje ne postoji
-				this.b = k();          //semanticka, metoda k() vraca void
-				return b;              //semanticka, ne poklapa se tip povratne vrednosti
-			}
+			void stampajGodinu(){
+				print(this.godinaRodjenja);
+				print(eol);
+			}		
 		}
-		
 	}
 	
-	class Beta{
-		int a,b;
+	class Pekar extends Radnik{
+		char z[];
 		{
-			void setA(){
-				read(a);
-			}
-			
-			void setAB(int aa, int bb){
-				a = aa;
-				b = bb;
+			void postaviIme(string ime){
+				this.ime = "Pekar " + ime;
 			}
 		}
 	}
 	
-	class Gama extends Beta{
-		Beta b;
+	class Poslasticar extends Pekar{
+		Radnik pomocnik;
+		{
+			void postaviIme(string ime){
+				this.ime = "Poslasticar " + ime;
+			}
+		}
 	}
 	
-	Gama g;
+	const string izlaz = "Unesite ceo broj\n";
+	int i;
+	
 {
-	void main2()               //semanticka na kraju, nije definisana main fja
-	Alfa a;
-	{
-		a = new Alfa;
-		g = new Gama;
-		print(a.f((3 + 5)-4));
-		this = 3;               //semanticka, this nedeklarisan, ne poklapaju se tipovi
-		
-		g.setA(2);              //semanticka, broj parametara se ne poklapa (ovde je visak parametara)
-		g.setAB(2);              //semanticka, isto (ovde je manjak parametara)
-		g.setAB('a', 'b');       //semanticka, ne poklapaju se tipovi oba parametra
-		g.setAB('a',  5);        //semanticka, ne poklapa se tip prvog parametra
-		g.setAB( 5,  'b');       //semanticka, ne poklapa se tip drugog parametra
+	string uporedi(string a, string b){
+		if (a == b) 
+			return "isti";
+		return "razliciti";
 	}
-}	
+	
+	void stampaj(string s){
+		print(s);
+		print(eol);
+	}
+
+	void main() Radnik r1, r2, r3; Pekar pe; Poslasticar ps;{
+		r1 = new Radnik;  
+		r2 = new Pekar;
+		r3 = new Poslasticar;
+		pe = new Pekar;
+		ps = new Poslasticar;
+	
+		ps.pomocnik = pe;
+		ps.pomocnik.p = new char[4];
+		
+		r1.postaviIme("Zoran");  // ime = Zoran
+		r2.postaviIme("Goran");  // ime = Pekar Goran
+		r3.postaviIme("Goran");  // ime = Poslasticar Goran
+		pe.postaviIme("Bojan");  // ime = Pekar Bojan
+		ps.postaviIme("Mira");   // ime = Poslasticar Mira
+		ps.pomocnik.postaviIme("Ceca"); // ime = Pekar Ceca
+		ps.pomocnik.p[0] = 'r';
+		ps.pomocnik.p[1] = 'a';
+		ps.pomocnik.p[2] = 'd';
+		ps.pomocnik.p[3] = 'i';
+		
+		stampaj(r1.ime);    //izlaz Zoran
+		stampaj(r2.ime);    //izlaz Pekar Goran
+		stampaj(r3.ime);    //izlaz Poslasticar Goran
+		stampaj(ps.pomocnik.ime); // izlaz Pekar Ceca
+		
+		print(uporedi(r2.ime, r3.ime));  // izlaz razliciti
+		print(eol);
+		
+		i = 0;
+		while(i < len(ps.pomocnik.p)){
+			print(ps.pomocnik.p[i]);
+			i++;
+		}
+		print(eol);
+		
+		print(izlaz);
+		read(r1.godinaRodjenja);  //uneti broj
+		if (r1.godinaRodjenja > 0)
+			stampaj(pe.ime);     //Pekar Bojan
+		else
+			stampaj(ps.ime);     // Poslasticar Mira
+			
+		r2.godinaRodjenja = 1970;
+		r2.stampajGodinu();
+		
+		ps.pomocnik.godinaRodjenja = 1980;
+		ps.pomocnik.stampajGodinu();
+	}
+}
+//izlazi : Zoran
+	//	   Pekar Goran
+	//	   Poslasticar Goran
+	//	   Pekar Ceca
+	//	   razliciti
+	//	   radi
+	
+// ako je unet pozitivan broj:
+    //    Pekar Bojan
+// inace:
+    //    Poslasticar Mira
+//dalje:
+    //     1970
+	//     1980
+	

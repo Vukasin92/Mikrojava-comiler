@@ -11,6 +11,7 @@ import rs.etf.pp1.mj.runtime.*;
 import java.util.Stack;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
 
 
 parser code {:
@@ -191,7 +192,14 @@ action code {:
 	Stack<Stack<Integer>> controlStacksT = new Stack<Stack<Integer>>();
 	Stack<Stack<Integer>> controlStacksF = new Stack<Stack<Integer>>();
 	Stack<Stack<Integer>> controlStacksB = new Stack<Stack<Integer>>();
+	HashMap<Obj, Obj> var2Type = new HashMap<Obj, Obj>();
 	Stack<Integer> breakJumps = new Stack<Integer>();
+	int hiddenVarsCount = 0;
+	boolean newClassFactor = false;
+	boolean classMethodCall = false;
+	Obj prevDesignator = null;
+	Obj typeNode = null;
+
 	class CodeBuff {
 		 private  ArrayList<Byte> buff = new ArrayList<Byte>();
 		 public void put (int x)  {
@@ -253,7 +261,7 @@ action code {:
 	void redefineMethod() {
 		currentMethod.getLocalSymbols().clear();
 	}
-
+	private int methodTableSize = 0;
 	List<Byte> MethodTable = new ArrayList<Byte>(); 
 	void addWordToStaticData (int value, int address){ 
 	  MethodTable.add(new Byte((byte)Code.const_)); 
@@ -264,22 +272,30 @@ action code {:
 	  MethodTable.add(new Byte((byte)Code.putstatic)); 
 	  MethodTable.add(new Byte((byte)(address>>8))); 
 	  MethodTable.add(new Byte((byte)address)); 
+	  methodTableSize++;
+	  Obj temp = new Obj(Obj.Var, "__"+getMethodTableSize()+"_#_", Tab.intType, methodTableSize, 0);
+	  //Code.dataSize++;
 	 } 
 	 void addNameTerminator() { 
 	  addWordToStaticData(-1, Code.dataSize++); 
+	 
 	 } 
 	 void addTableTerminator() { 
 	  addWordToStaticData(-2, Code.dataSize++); 
+	  
 	 } 
 	 void addFunctionAddress(int functionAddress) { 
 	  addWordToStaticData(functionAddress, Code.dataSize++); 
 	 } 
  	void addFunctionEntry(String name, int functionAddressInCodeBuffer) { 
 	  for (int j=0; j<name.length(); j++)  { 
-	   addWordToStaticData((int)(name.charAt(j)), Code.dataSize++);  
+	   addWordToStaticData((int)(name.charAt(j)), Code.dataSize++);
 	  } 
 	  addNameTerminator();   addFunctionAddress(functionAddressInCodeBuffer); 
- 	} 
+ 	}
+ 	int getMethodTableSize() {
+ 		return methodTableSize;
+ 	}
 
  	void resetDesignatorInExprCond() {
  		if (!designatorInExprStack.empty()) {
@@ -344,7 +360,7 @@ Program ::= PROGRAM ProgName:p DeclarationList LBRACE {:
 					:} MethodDeclList RBRACE
 {:
 	
-	Code.dataSize += Tab.currentScope().getnVars();
+	//Code.dataSize += Tab.currentScope().getnVars();
 	Obj myMain = Tab.find("main");
 	if (myMain==Tab.noObj) {
 		parser.report_error("Greska : ulazni fajl ne sadrzi main metodu", null);
@@ -449,6 +465,7 @@ ConstVar ::= IDENT:varName
 	else {
 		if (var_type==Tab.find("string").getType()) {
 			Tab.insert(Obj.Var, varName+"__$#_", var_type);
+			hiddenVarsCount++;
 		}
 		Obj obj = Tab.insert(Obj.Con, varName, var_type);
 		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
@@ -591,8 +608,15 @@ Var ::= IDENT:varName
 		if (classDef) {
 			Tab.insert(Obj.Fld, varName, var_type);
 		}
-		else
-			Tab.insert(Obj.Var, varName, var_type);
+		else {
+			Obj o = Tab.insert(Obj.Var, varName, var_type);
+			if (currentLevel==0) {
+				o.setAdr(Code.dataSize++);
+			}
+			else {
+				
+			}
+		}
 		parser.report_info("Deklarisana promenljiva "+varName+" na liniji "+varNameleft, null);
 		if (var_type.getKind()==Struct.Char && global == true) {
 			parser.globalCharVarCount++;
@@ -623,7 +647,7 @@ Var ::= IDENT:varName
 Type ::= IDENT:typeName
 {:
 	
-	Obj typeNode = Tab.find(typeName);
+	typeNode = Tab.find(typeName);
 	if (typeNode == Tab.noObj) {
 		parser.report_error("Semanticka greska na liniji "+typeNameleft+ ": Nije pronadjen tip " + typeName + " u tabeli simbola.", null);
 		var_type = RESULT = Tab.noType;
@@ -692,6 +716,9 @@ ClassDecl ::= CLASS IDENT:name Ext:ext LBRACE {:
 							i++;
 						}
 					}
+					else {
+						Obj o = Tab.insert(Obj.Fld, "hidden__$_#_", Tab.intType);
+					}
 					
 				:} VarDeclList ClassMethods RBRACE {:
 					// atributi klase koji se nalaze u unutrasnjem opsegu se  
@@ -699,6 +726,8 @@ ClassDecl ::= CLASS IDENT:name Ext:ext LBRACE {:
 					 Tab.chainLocalSymbols(currentClass.getType());
 					 int numOfFields = currentClass.getType().getNumberOfFields();
 					 Collection<Obj> locals = Tab.currentScope().getLocals().symbols();
+					 int vftStart = getMethodTableSize();
+					 currentClass.setAdr(vftStart+Code.dataSize);
 					 for (Obj obj: locals) {
 						 if (obj.getKind()==Obj.Meth) {
 							// Generate method entry.
@@ -831,6 +860,10 @@ MethodDecl ::= ReturnType:retType IDENT:methName
 		for (Byte b : codeBuff.getBuff()) {
 			Code.buf[Code.pc++] = b;
 		}
+		for (byte b: MethodTable) {
+			Code.buf[Code.pc++] = b;
+		}
+		MethodTable.clear();
 	}
 	Code.put(Code.enter);
 	Code.put(currentMethod.getLevel());
@@ -947,7 +980,7 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 			}
 			eTemp = eTemp.getElemType();
 		}
-	
+		
 		if (!substitution && !e.assignableTo(dest.getType()) && dest.getType().getKind() != Struct.Array) {
 			g = false; parser.report_error("Semanticka greska na liniji "+destleft+": izraz tipa "+parser.getTypeName(e)+" ne moze biti dodeljen tipu "+parser.getTypeName(dest.getType()),null);
 		}
@@ -966,13 +999,37 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 	if (!g) {
 		Code.store(dest);
 	}
+	Obj tmp = null;
+	boolean b = false;
 	if (designatorInExpr) {
-		designatorStack.pop();
+		tmp = designatorStack.pop();
 		//designatorInExpr = false;
+		b = true;
 		resetDesignatorInExprCond();
 	}
 	//designatorStack.pop();
-	
+	if (newClassFactor) {
+
+		newClassFactor = false;
+		if (dest.getKind()==Obj.Fld) {
+			Code.load(prevDesignator);
+		}
+		Code.load(dest);
+		Code.put(Code.const_);
+		if (b) {
+			var2Type.remove(dest);
+			Obj o = var2Type.get(tmp);
+			var2Type.put(dest, o);
+			Code.put4(o.getAdr());
+		}
+		else {
+			var2Type.remove(dest);
+			var2Type.put(dest, typeNode);
+			Code.put4(typeNode.getAdr());
+		}
+		Code.put(Code.putfield);
+		Code.put2(0);
+	}
 :}
 				|
 			Designator:dest DesignatorsFollowUp SEMI
@@ -995,7 +1052,7 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 	}
 :}
 				|
-			Designator:func LPAREN ActParams RPAREN SEMI
+			Designator:func	LPAREN ActParams RPAREN SEMI
 {:
 	if (Obj.Meth == func.getKind()) {
 		parser.report_info("Pronadjen poziv funkcije "+func.getName()+" na liniji "+funcleft, null);
@@ -1010,8 +1067,21 @@ Matched ::= Designator:dest EQUAL Expr:e SEMI
 		parser.funcCallsInMain++;
 	}
 	int destAdr = func.getAdr() - Code.pc;
-	Code.put(Code.call);
-	Code.put2(destAdr);
+	if (classMethodCall) {
+		classMethodCall = false;
+		Code.load(prevDesignator);
+		Code.put(Code.getfield);
+		Code.put2(0);
+		Code.put(Code.invokevirtual);
+		for (char c:func.getName().toCharArray()) {
+			Code.put4(c);
+		}
+		Code.put4(-1);
+	}
+	else {
+		Code.put(Code.call);
+		Code.put2(destAdr);
+	}
 	if (func.getType() != Tab.noType) {
 		Code.put(Code.pop);
 	}
@@ -1788,8 +1858,21 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 		parser.report_error(func.getName(), funcleft, "ne moze se koristiti u izrazima jer nema povratnu vrednost");
 	}
 	int destAdr = func.getAdr() - Code.pc;
-	Code.put(Code.call);
-	Code.put2(destAdr);
+	if (classMethodCall) {
+		classMethodCall = false;
+		Code.load(prevDesignator);
+		Code.put(Code.getfield);
+		Code.put2(0);
+		Code.put(Code.invokevirtual);
+		for (char c:func.getName().toCharArray()) {
+			Code.put(c);
+		}
+		Code.loadConst(-1);
+	}
+	else {
+		Code.put(Code.call);
+		Code.put2(destAdr);
+	}
 	setDesignatorInExprCond();
 	designatorInExpr = true;
 	//designatorInExpr = true;
@@ -1897,6 +1980,10 @@ Factor ::= Designator:func LPAREN ActParams RPAREN
 	   			 }
 	   			 RESULT = tip1; setDesignatorInExprCond();
                 designatorInExpr = false; 
+                int n = tip1.getNumberOfFields()*4;
+                Code.put(Code.new_);
+                Code.put2(n);
+                newClassFactor = true;
 			:}
 			|
 			NEW Type:t LSQUARE Expr:e RSQUARE
@@ -2070,7 +2157,7 @@ IdentRef ::= DOT IDENT:ident
 						previosDesignator = currentDesignator;
 						currentDesignator = obj;
 						//if (designatorInExpr) {
-							Obj t = designatorStack.pop();
+							Obj t  = prevDesignator = designatorStack.pop();
 							if (t.getType()==Tab.find("string").getType() && t.getKind()==Obj.Con) {
 								t = Tab.find(ident+"__$#_");
 							}
@@ -2082,8 +2169,19 @@ IdentRef ::= DOT IDENT:ident
 							parser.report_error("Semanticka greska na liniji "+identleft+": ime "+ident+" nije deklarisano.", null);
 						}
 						RESULT = obj;
+						if (obj.getKind() == Obj.Meth) {
+							classMethodCall = true;
+							//Code.load(prevDesignator);
+						}
 						curr_ident = obj;
 						designatorIsArrElem = false;
+						if (obj.getType().getKind()==Struct.Class) {
+							newClassFactor = true;
+							//Code.load(obj);
+						}
+						else {
+							newClassFactor = false;
+						}
 
 					}
 				}
